@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String?
+  role          String
+  walletAddress String?
+  createdAt     DateTime @default(now())
+  cases         Case[]
+  bids          Bid[]
+}
+
+model Case {
+  id        String   @id @default(cuid())
+  farmerId  String
+  farmer    User     @relation(fields: [farmerId], references: [id])
+  imageUrl  String
+  diagnosis String?
+  status    String   @default("OPEN")
+  createdAt DateTime @default(now())
+  bids      Bid[]
+  escrow    Escrow?
+  dispute   Dispute?
+}
+
+model Bid {
+  id        String   @id @default(cuid())
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id])
+  vendorId  String
+  vendor    User     @relation(fields: [vendorId], references: [id])
+  amount    Decimal
+  proposal  String
+  selected  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Escrow {
+  id           String        @id @default(cuid())
+  caseId       String        @unique
+  case         Case          @relation(fields: [caseId], references: [id])
+  contractId   String?
+  status       String        @default("PENDING_SIGNATURE")
+  amount       Decimal
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  escrowId  String
+  escrow    Escrow   @relation(fields: [escrowId], references: [id])
+  xdr       String
+  type      String
+  signed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Dispute {
+  id         String   @id @default(cuid())
+  caseId     String   @unique
+  case       Case     @relation(fields: [caseId], references: [id])
+  reason     String
+  status     String   @default("OPEN")
+  resolvedBy String?
+  createdAt  DateTime @default(now())
+}
