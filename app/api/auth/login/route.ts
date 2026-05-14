@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       user: {
         id: user.id,
         email: user.email,
+        username: user.username,
         role: user.role,
         walletAddress: user.walletAddress,
       },

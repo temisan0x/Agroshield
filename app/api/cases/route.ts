@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+type CaseListEntry = Awaited<ReturnType<typeof prisma.case.findMany>>[number];
+
 function parseDiagnosis(value: string | null) {
   if (!value) return null;
   try {
@@ -21,7 +23,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    const formatted = cases.map((entry) => ({
+    const formatted = cases.map((entry: CaseListEntry) => ({
       ...entry,
       diagnosis: parseDiagnosis(entry.diagnosis),
     }));

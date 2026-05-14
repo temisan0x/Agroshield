@@ -23,7 +23,7 @@ export default function CTA() {
             Join farmers and vendors already using AgroShield on Stellar testnet.
           </p>
           <button className="mt-8 rounded-full bg-green-500 px-8 py-4 text-base font-semibold text-white transition hover:bg-green-400 md:text-lg">
-            Try it — it's free →
+            Try it — it&apos;s free →
           </button>
         </motion.div>
       </div>
