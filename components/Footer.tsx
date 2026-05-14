@@ -1,6 +1,12 @@
 "use client";
 
 import { motion } from "motion/react";
+import Link from "next/link";
+
+type FooterLink = {
+  label: string;
+  href: string;
+};
 
 const columns = [
   {
@@ -9,7 +15,12 @@ const columns = [
   },
   {
     label: "Solutions",
-    links: ["AI Diagnosis", "Escrow", "Dispute Resolution", "Marketplace"],
+    links: [
+      { label: "AI Diagnosis", href: "/diagnose" },
+      { label: "Escrow", href: "#" },
+      { label: "Dispute Resolution", href: "#" },
+      { label: "Marketplace", href: "/marketplace" },
+    ] as FooterLink[],
   },
   {
     label: "Company",
@@ -37,10 +48,16 @@ export default function Footer() {
               <div className="text-sm font-semibold text-neutral-700">{column.label}</div>
               <ul className="mt-4 space-y-2 text-sm text-neutral-400">
                 {column.links.map((link) => (
-                  <li key={link}>
-                    <a className="transition hover:text-neutral-700" href="#">
-                      {link}
-                    </a>
+                  <li key={typeof link === "string" ? link : link.label}>
+                    {typeof link === "string" ? (
+                      <a className="transition hover:text-neutral-700" href="#">
+                        {link}
+                      </a>
+                    ) : (
+                      <Link className="transition hover:text-neutral-700" href={link.href}>
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
