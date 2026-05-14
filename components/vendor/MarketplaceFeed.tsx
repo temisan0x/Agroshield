@@ -64,8 +64,13 @@ export default function MarketplaceFeed() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
+      <div className="grid gap-4 md:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="h-48 rounded-2xl bg-neutral-100 animate-pulse"
+          />
+        ))}
       </div>
     );
   }
@@ -86,82 +91,82 @@ export default function MarketplaceFeed() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6">
-      <motion.div
-        initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_30px_80px_-60px_rgba(0,0,0,0.4)]"
-      >
-        <div className="relative border-b border-neutral-100 px-8 py-8">
-          <div className="absolute right-0 top-0 h-40 w-40 -translate-y-8 translate-x-8 rounded-full bg-[#c7f1d2] opacity-40 blur-3xl" />
-          <div className="relative">
-            <h1 className="font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">Marketplace</h1>
-            <p className="mt-1 text-sm text-neutral-500">Browse open cases and submit your treatment bids.</p>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <input type="text" placeholder="Search by disease or farmer…" value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 rounded-2xl border border-neutral-200 bg-[#F5F0EB] py-3 px-4 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]" />
-              <div className="flex gap-1 rounded-2xl border border-neutral-200 bg-[#F5F0EB] p-1">
-                {(["all", "high", "near"] as const).map((tab) => (
+    <div>
+      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-neutral-100 bg-white p-4 sm:flex-row">
+        <label className="flex flex-1 items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-600">
+          <span className="text-base">🔍</span>
+          <input
+            type="text"
+            placeholder="Search disease, location..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-transparent text-sm text-neutral-700 outline-none placeholder:text-neutral-300"
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {(["all", "high", "near"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setQuickFilter(tab)}
+              className={`rounded-full px-4 py-1.5 text-sm transition ${
+                quickFilter === tab
+                  ? "bg-neutral-900 text-white"
+                  : "border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
+              }`}
+            >
+              {tab === "all" ? "All" : tab === "high" ? "High Urgency" : "Near Me"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <AnimatePresence mode="popLayout">
+        {filtered.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {filtered.map((c, i) => (
+              <CaseCard
+                key={c.id}
+                caseItem={c}
+                index={i}
+                onClick={() => router.push(`/vendor/cases/${c.id}`)}
+                action={
                   <button
-                    key={tab}
-                    onClick={() => setQuickFilter(tab)}
-                    className={`rounded-xl px-4 py-1.5 text-xs font-medium transition ${
-                      quickFilter === tab
-                        ? "bg-white text-neutral-900 shadow-sm"
-                        : "text-neutral-500 hover:text-neutral-700"
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setBidCaseId(c.id);
+                    }}
+                    disabled={placedBids[c.id]}
+                    className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+                      placedBids[c.id]
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-neutral-900 text-white hover:bg-neutral-800"
                     }`}
                   >
-                    {tab === "all" ? "All" : tab === "high" ? "High Urgency" : "Near Me"}
+                    {placedBids[c.id] ? "Bid placed" : "Place Bid →"}
                   </button>
-                ))}
-              </div>
-            </div>
+                }
+              />
+            ))}
           </div>
-        </div>
-
-        <div className="p-8">
-          <AnimatePresence mode="popLayout">
-            {filtered.length > 0 ? (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {filtered.map((c, i) => (
-                  <CaseCard
-                    key={c.id}
-                    caseItem={c}
-                    index={i}
-                    onClick={() => router.push(`/vendor/cases/${c.id}`)}
-                    action={
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setBidCaseId(c.id);
-                        }}
-                        disabled={placedBids[c.id]}
-                        className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
-                          placedBids[c.id]
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-neutral-900 text-white hover:bg-neutral-800"
-                        }`}
-                      >
-                        {placedBids[c.id] ? "Bid placed" : "Place bid"}
-                      </button>
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="rounded-2xl border border-dashed border-neutral-200 bg-[#F9F4EE] px-6 py-16 text-center">
-                <p className="text-sm text-neutral-500">
-                  {search ? "No cases match your search." : "No open cases at the moment."}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 px-6 py-20 text-center"
+          >
+            <div className="text-5xl">🌾</div>
+            <p className="mt-4 font-[family-name:var(--font-manrope)] text-xl font-bold text-neutral-900">
+              No open cases yet
+            </p>
+            <p className="mt-1 text-sm text-neutral-500">
+              Check back soon — farmers are actively posting
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {bidCaseId ? (

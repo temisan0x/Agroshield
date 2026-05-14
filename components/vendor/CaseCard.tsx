@@ -15,6 +15,13 @@ export default function CaseCard({ caseItem, index = 0, onClick, action }: CaseC
   const reduceMotion = useReducedMotion();
   const disease = caseItem.diagnosis?.disease ?? "Undiagnosed";
   const confidence = caseItem.diagnosis?.confidence;
+  const confidencePercent = (() => {
+    if (confidence == null) return null;
+    const numeric = Number(confidence);
+    if (Number.isNaN(numeric)) return null;
+    const percent = numeric <= 1 ? numeric * 100 : numeric;
+    return Math.max(0, Math.min(100, Math.round(percent)));
+  })();
   const urgencyRaw = String(caseItem.diagnosis?.urgency ?? "medium").toLowerCase();
   const urgency = urgencyRaw.includes("high")
     ? "HIGH"
@@ -23,13 +30,16 @@ export default function CaseCard({ caseItem, index = 0, onClick, action }: CaseC
       : "MEDIUM";
   const urgencyTone =
     urgency === "HIGH"
-      ? "bg-red-100 text-red-700"
+      ? "bg-red-50 text-red-600 border border-red-100"
       : urgency === "LOW"
-        ? "bg-emerald-100 text-emerald-700"
-        : "bg-amber-100 text-amber-700";
-  const location =
-    (caseItem.diagnosis as { location?: string } | null)?.location ??
-    "Location unavailable";
+        ? "bg-green-50 text-green-700 border border-green-100"
+        : "bg-yellow-50 text-yellow-700 border border-yellow-100";
+  const statusTone =
+    caseItem.status === "OPEN"
+      ? "bg-blue-50 text-blue-600 border border-blue-100"
+      : "bg-yellow-50 text-yellow-700 border border-yellow-100";
+  const location = (caseItem.diagnosis as { location?: string } | null)?.location ?? "";
+  const locationLabel = location ? "Location on file" : "Location not shared";
   const date = new Date(caseItem.createdAt).toLocaleDateString("en-NG", {
     month: "short",
     day: "numeric",
@@ -40,72 +50,58 @@ export default function CaseCard({ caseItem, index = 0, onClick, action }: CaseC
     <motion.div
       initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.06 }}
+      transition={{ duration: 0.25, delay: index * 0.04, ease: "easeOut" }}
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_8px_30px_-12px_rgba(0,0,0,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_50px_-16px_rgba(0,0,0,0.18)] ${
+      className={`group relative h-full overflow-hidden rounded-2xl border border-neutral-100 bg-white shadow-sm transition-all duration-200 hover:border-neutral-200 hover:shadow-md ${
         onClick ? "cursor-pointer" : ""
       }`}
     >
       {/* Image */}
-      <div className="relative h-48 w-full overflow-hidden bg-neutral-100">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={caseItem.imageUrl}
-          alt={disease}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-
-        {/* Status badge */}
-        <span
-          className={`absolute left-4 top-4 rounded-full px-3 py-1 text-xs font-semibold backdrop-blur-sm ${
-            caseItem.status === "OPEN"
-              ? "bg-emerald-500/20 text-emerald-100"
-              : "bg-amber-500/20 text-amber-100"
-          }`}
-        >
-          {caseItem.status === "OPEN" ? "Open" : "In Progress"}
-        </span>
-
-      </div>
-
-      {/* Content */}
-      <div className="px-6 py-5">
-        <h3 className="font-[family-name:var(--font-manrope)] text-base font-bold text-neutral-900">
-          {disease}
-        </h3>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${urgencyTone}`}>
-            {urgency}
-          </span>
-          <span className="text-xs text-neutral-400">{location}</span>
-        </div>
-
-        {confidence != null && (
-          <div className="mt-2 flex items-center gap-2">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
-              <div
-                className="h-full rounded-full bg-[#0f6b2f] transition-all duration-500"
-                style={{ width: `${Math.round(confidence * 100)}%` }}
-              />
-            </div>
-            <span className="text-xs font-medium text-neutral-500">
-              {Math.round(confidence * 100)}%
-            </span>
+      <div className="relative h-44 w-full overflow-hidden bg-neutral-100">
+        {caseItem.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={caseItem.imageUrl}
+            alt={disease}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 text-4xl">
+            🌿
           </div>
         )}
 
-        <div className="mt-3 flex items-center justify-between text-xs text-neutral-400">
+        <span className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-medium ${urgencyTone}`}>
+          {urgency}
+        </span>
+        <span className={`absolute right-3 top-3 rounded-full px-3 py-1 text-xs font-medium ${statusTone}`}>
+          {caseItem.status === "OPEN" ? "Open" : "In Progress"}
+        </span>
+      </div>
+
+      {/* Content */}
+      <div className="flex h-full min-h-[190px] flex-col p-5">
+        <h3 className="font-[family-name:var(--font-manrope)] text-base font-bold leading-snug text-neutral-900">
+          {disease}
+        </h3>
+        <div className="mt-1.5 flex items-center gap-1.5 text-sm text-neutral-500">
+          <span className="text-xs">📍</span>
+          <span>{locationLabel}</span>
+        </div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-400">
+          <span>🕐</span>
           <span>{date}</span>
-          <span>{caseItem._count.bids} bid{caseItem._count.bids !== 1 ? "s" : ""}</span>
         </div>
 
-        {action ? (
-          <div className="mt-4 flex justify-end" onClick={(event) => event.stopPropagation()}>
-            {action}
-          </div>
-        ) : null}
+        <div className="mt-auto flex items-center justify-between border-t border-neutral-50 pt-4 text-xs text-neutral-500">
+          <span className="flex items-center gap-1">
+            <span>💬</span>
+            {caseItem._count.bids} bid{caseItem._count.bids !== 1 ? "s" : ""}
+          </span>
+          {action ? (
+            <span onClick={(event) => event.stopPropagation()}>{action}</span>
+          ) : null}
+        </div>
       </div>
     </motion.div>
   );

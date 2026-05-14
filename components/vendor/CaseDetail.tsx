@@ -63,7 +63,16 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
 
   const disease = caseData.diagnosis?.disease ?? "Undiagnosed";
   const confidence = caseData.diagnosis?.confidence;
-  const description = caseData.diagnosis?.description;
+  const confidencePercent = (() => {
+    if (confidence == null) return null;
+    const numeric = Number(confidence);
+    if (Number.isNaN(numeric)) return null;
+    const percent = numeric <= 1 ? numeric * 100 : numeric;
+    return Math.max(0, Math.min(100, Math.round(percent)));
+  })();
+  const description = caseData.diagnosis?.description ?? caseData.diagnosis?.treatment;
+  const location = (caseData.diagnosis as { location?: string } | null)?.location ?? "Not shared";
+  const cropType = (caseData.diagnosis as { crop?: string } | null)?.crop ?? "Not specified";
   const date = new Date(caseData.createdAt).toLocaleDateString("en-NG", {
     month: "long", day: "numeric", year: "numeric",
   });
@@ -149,121 +158,170 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-6">
+    <div>
       <motion.div
         initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_30px_80px_-60px_rgba(0,0,0,0.4)]"
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]"
       >
-        <div className="absolute right-0 top-0 h-64 w-64 -translate-y-16 translate-x-16 rounded-full bg-[#c7f1d2] opacity-60 blur-3xl" />
-        <div className="absolute bottom-0 left-0 h-52 w-52 -translate-x-12 translate-y-12 rounded-full bg-[#f1dcc7] opacity-70 blur-2xl" />
-
-        <div className="relative grid gap-0 lg:grid-cols-[1fr_1fr]">
-          {/* Left: image */}
-          <div className="relative h-72 overflow-hidden bg-neutral-100 lg:h-auto lg:min-h-[420px]">
+        <div>
+          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-neutral-100">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={caseData.imageUrl} alt={disease}
-              className="h-full w-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-            <span className={`absolute left-5 top-5 rounded-full px-3 py-1 text-xs font-semibold backdrop-blur-sm ${
-              caseData.status === "OPEN" ? "bg-emerald-500/20 text-emerald-100" : "bg-amber-500/20 text-amber-100"
-            }`}>
-              {caseData.status === "OPEN" ? "Open for bids" : caseData.status.replace("_", " ")}
+            <img src={caseData.imageUrl} alt={disease} className="h-full w-full object-cover" />
+            <span
+              className={`absolute left-4 top-4 rounded-full border px-3 py-1 text-xs font-medium ${
+                caseData.status === "OPEN"
+                  ? "bg-blue-50 text-blue-600 border-blue-100"
+                  : "bg-yellow-50 text-yellow-700 border-yellow-100"
+              }`}
+            >
+              {caseData.status === "OPEN" ? "Open" : caseData.status.replace("_", " ")}
             </span>
           </div>
 
-          {/* Right: details */}
-          <section className="border-neutral-100 bg-[#F9F4EE] px-8 py-10 lg:border-l lg:px-10 lg:py-12">
-            <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">Case Detail</p>
-            <h1 className="mt-3 font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">
+          <div className="mt-6">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-neutral-400">
+              Case details
+            </p>
+            <h1 className="font-[family-name:var(--font-manrope)] text-3xl font-extrabold text-neutral-900">
               {disease}
             </h1>
 
-            {confidence != null && (
-              <div className="mt-4 flex items-center gap-3">
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-200">
-                  <motion.div initial={{ width: 0 }}
-                    animate={{ width: `${Math.round(confidence * 100)}%` }}
-                    transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
-                    className="h-full rounded-full bg-[#0f6b2f]" />
+            {confidencePercent != null && (
+              <div className="mt-3 flex items-center gap-3">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${confidencePercent}%` }}
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    className="h-full rounded-full bg-green-500"
+                  />
                 </div>
-                <span className="text-sm font-semibold text-neutral-700">
-                  {Math.round(confidence * 100)}% confidence
+                <span className="whitespace-nowrap text-sm font-semibold text-neutral-700">
+                  {confidencePercent}% confidence
                 </span>
               </div>
             )}
 
-            {description && (
-              <p className="mt-4 text-sm leading-relaxed text-neutral-600">{description}</p>
-            )}
+            {description ? (
+              <div className="mt-4 rounded-xl border border-green-100 bg-green-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-green-700">
+                  Recommended treatment
+                </p>
+                <p className="mt-1 text-sm text-green-900">{description}</p>
+              </div>
+            ) : null}
 
-            <div className="mt-6 space-y-3">
-              <InfoRow label="Farmer" value={caseData.farmer.email} />
-              <InfoRow label="Submitted" value={date} />
-              <InfoRow label="Status" value={caseData.status.replace("_", " ")} />
-              <InfoRow label="Current Bids" value={String(caseData.bids.length)} />
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <MetaCell label="Farmer" value={maskEmail(caseData.farmer.email)} />
+              <MetaCell label="Submitted" value={date} />
+              <MetaCell label="Location" value={location} />
+              <MetaCell label="Crop Type" value={cropType} />
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:sticky lg:top-6">
+          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap gap-2">
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  String(caseData.diagnosis?.urgency ?? "MEDIUM").toUpperCase().startsWith("H")
+                    ? "bg-red-50 text-red-600 border-red-100"
+                    : String(caseData.diagnosis?.urgency ?? "MEDIUM").toUpperCase().startsWith("L")
+                      ? "bg-green-50 text-green-700 border-green-100"
+                      : "bg-yellow-50 text-yellow-700 border-yellow-100"
+                }`}
+              >
+                {String(caseData.diagnosis?.urgency ?? "MEDIUM").toUpperCase()}
+              </span>
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  caseData.status === "OPEN"
+                    ? "bg-blue-50 text-blue-600 border-blue-100"
+                    : "bg-yellow-50 text-yellow-700 border-yellow-100"
+                }`}
+              >
+                {caseData.status === "OPEN" ? "Open" : caseData.status.replace("_", " ")}
+              </span>
             </div>
 
-            {caseData.status === "OPEN" && viewerRole === "VENDOR" && (
-              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }}
-                onClick={() => setBidOpen(true)}
-                className="mt-8 w-full rounded-2xl bg-neutral-900 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-neutral-800">
-                Submit a bid
-              </motion.button>
-            )}
+            <h2 className="mt-4 font-[family-name:var(--font-manrope)] text-lg font-bold text-neutral-900">
+              Ready to treat this case?
+            </h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Submit your proposal with pricing and delivery time.
+            </p>
 
-            {caseData.status !== "OPEN" && (
-              <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-xs text-amber-700">
-                This case is no longer accepting bids.
+            {caseData.status === "OPEN" && viewerRole === "VENDOR" ? (
+              <button
+                type="button"
+                onClick={() => setBidOpen(true)}
+                className="mt-5 w-full rounded-xl bg-neutral-900 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-neutral-800"
+              >
+                Submit a Bid
+              </button>
+            ) : (
+              <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-500">
+                This case is not accepting new bids.
               </div>
             )}
-          </section>
+
+            <div className="my-5 border-t border-neutral-100" />
+
+            <div className="flex flex-col gap-3 text-xs text-neutral-400">
+              <div className="flex items-center justify-between">
+                <span>CURRENT BIDS</span>
+                <span className="text-sm font-bold text-neutral-900">{caseData.bids.length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>POSTED</span>
+                <span className="text-sm font-bold text-neutral-900">{date}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </motion.div>
 
-      {/* Existing bids */}
-      {caseData.bids.length > 0 && (
-        <motion.div
-          initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="mt-6 overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_20px_60px_-40px_rgba(0,0,0,0.25)]"
-        >
-          <div className="border-b border-neutral-100 px-8 py-6">
-            <h2 className="font-[family-name:var(--font-manrope)] text-lg font-bold text-neutral-900">
-              Bids on this case
-            </h2>
-            <p className="mt-0.5 text-sm text-neutral-500">
-              {caseData.bids.length} bid{caseData.bids.length !== 1 ? "s" : ""} submitted
-            </p>
-          </div>
-          <div className="space-y-3 px-8 py-6">
+      <div className="mt-10">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-[family-name:var(--font-manrope)] text-xl font-bold text-neutral-900">
+            Bids on this case
+          </h3>
+          <span className="text-sm text-neutral-500">
+            {caseData.bids.length} bid{caseData.bids.length !== 1 ? "s" : ""} submitted
+          </span>
+        </div>
+
+        {caseData.bids.length > 0 ? (
+          <div className="flex flex-col gap-3">
             {caseData.bids.map((bid, i) => {
               const status = deriveBidStatus(bid.selected, caseData.status);
               const amount = `$${Number(bid.amount).toFixed(2)}`;
 
               return (
-                <BidRow
-                  key={bid.id}
-                  title={bid.vendor.email}
-                  subtitle={bid.proposal}
-                  amount={amount}
-                  status={status}
-                  index={i}
-                  action={
-                    viewerRole === "FARMER" && caseData.status === "OPEN" && !bid.selected ? (
-                      <button
-                        type="button"
-                        onClick={() => handleAcceptBid(bid)}
-                        disabled={acceptingBidId === bid.id}
-                        className="rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {acceptingBidId === bid.id ? "Accepting..." : "Accept"}
-                      </button>
-                    ) : null
-                  }
-                />
+                <div key={bid.id} className="rounded-2xl border border-neutral-100 bg-white p-5 shadow-sm">
+                  <BidRow
+                    title={bid.vendor.email}
+                    subtitle={bid.proposal}
+                    amount={amount}
+                    status={status}
+                    index={i}
+                    action={
+                      viewerRole === "FARMER" && caseData.status === "OPEN" && !bid.selected ? (
+                        <button
+                          type="button"
+                          onClick={() => handleAcceptBid(bid)}
+                          disabled={acceptingBidId === bid.id}
+                          className="rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          {acceptingBidId === bid.id ? "Accepting..." : "Accept"}
+                        </button>
+                      ) : null
+                    }
+                  />
+                </div>
               );
             })}
             {escrowError ? (
@@ -277,24 +335,36 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
               </div>
             ) : null}
           </div>
-        </motion.div>
-      )}
+        ) : (
+          <div className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 p-10 text-center">
+            <div className="text-3xl">🤝</div>
+            <p className="mt-3 text-sm font-semibold text-neutral-900">No bids yet</p>
+            <p className="mt-1 text-xs text-neutral-500">Be the first to submit a proposal</p>
+          </div>
+        )}
+      </div>
 
       <AnimatePresence>
         {bidOpen && viewerRole === "VENDOR" && (
-          <BidModal caseId={id} onClose={() => setBidOpen(false)}
-            onSuccess={() => { fetchCase(); }} />
+          <BidModal caseId={id} onClose={() => setBidOpen(false)} onSuccess={() => { fetchCase(); }} />
         )}
       </AnimatePresence>
     </div>
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function MetaCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-3">
-      <span className="text-xs uppercase tracking-[0.15em] text-neutral-400">{label}</span>
-      <span className="text-sm font-medium text-neutral-700">{value}</span>
+    <div className="rounded-xl bg-neutral-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-[0.15em] text-neutral-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-neutral-800">{value}</p>
     </div>
   );
+}
+
+function maskEmail(value: string) {
+  const [name, domain] = value.split("@");
+  if (!name || !domain) return value;
+  if (name.length <= 2) return `••@${domain}`;
+  return `${name.slice(0, 2)}•••@${domain}`;
 }

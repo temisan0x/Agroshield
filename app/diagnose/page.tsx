@@ -163,7 +163,7 @@ export default function DiagnosePage() {
           ? "LOW"
           : "MEDIUM"
       );
-      setLocation(String(result.location ?? ""));
+      setLocation("");
       setDescription(String(result.treatment ?? result.symptoms ?? ""));
       if (!isAuthed) {
         setFreeRemaining((value) => Math.max(0, value - 1));
@@ -240,6 +240,13 @@ export default function DiagnosePage() {
       : step === "result"
       ? `Detected: ${String(diagnosis?.disease ?? "Unknown issue")}`
       : "Vendors near you will see this and submit bids.";
+  const confidencePercent = (() => {
+    if (diagnosis?.confidence == null) return null;
+    const numeric = Number(diagnosis.confidence);
+    if (Number.isNaN(numeric)) return null;
+    const percent = numeric <= 1 ? numeric * 100 : numeric;
+    return Math.max(0, Math.min(100, Math.round(percent)));
+  })();
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -339,7 +346,7 @@ export default function DiagnosePage() {
                       <div className="rounded-2xl border border-neutral-200 bg-white p-4">
                         <p className="text-xs text-neutral-400">Confidence</p>
                         <p className="mt-2 text-lg font-semibold text-neutral-900">
-                          {String(diagnosis?.confidence ?? "-")}%
+                          {confidencePercent != null ? `${confidencePercent}%` : "-"}
                         </p>
                       </div>
                       <div className="rounded-2xl border border-neutral-200 bg-white p-4">
@@ -448,7 +455,7 @@ export default function DiagnosePage() {
                         type="text"
                         value={location}
                         onChange={(event) => setLocation(event.target.value)}
-                        placeholder="e.g. Siliguri, West Bengal"
+                        placeholder="e.g. City, Region"
                         className="mt-2 w-full rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-[#16a34a] focus:ring-2 focus:ring-[#16a34a]/30"
                       />
                     </div>

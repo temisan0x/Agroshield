@@ -126,14 +126,37 @@ export default function MarketplacePage() {
     return cases.filter((entry) => entry.farmerId === user.id);
   }, [cases, user?.id]);
 
+  const farmerStats = useMemo(() => {
+    if (!user?.id) return { total: 0, open: 0, inProgress: 0, bids: 0 };
+    const owned = cases.filter((entry) => entry.farmerId === user.id);
+    const open = owned.filter((entry) => entry.status === "OPEN").length;
+    const inProgress = owned.filter((entry) => entry.status !== "OPEN").length;
+    const bids = owned.reduce((sum, entry) => sum + (entry._count?.bids ?? 0), 0);
+    return { total: owned.length, open, inProgress, bids };
+  }, [cases, user?.id]);
+
   const renderLoading = () => (
-    <div className="mx-auto w-full max-w-4xl px-6">
-      <div className="animate-pulse space-y-6 rounded-[28px] border border-neutral-200 bg-white p-6 shadow-sm">
-        <div className="h-6 w-32 rounded-full bg-neutral-100" />
-        <div className="h-10 w-full rounded-2xl bg-neutral-100" />
+    <div className="mx-auto w-full max-w-5xl px-6 py-10">
+      <div className="animate-pulse space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-3">
+            <div className="h-5 w-32 rounded-full bg-neutral-100" />
+            <div className="h-10 w-64 rounded-2xl bg-neutral-100" />
+            <div className="h-4 w-56 rounded-full bg-neutral-100" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-10 w-28 rounded-full bg-neutral-100" />
+            <div className="h-10 w-32 rounded-full bg-neutral-100" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-24 rounded-2xl bg-neutral-100" />
+          ))}
+        </div>
         <div className="grid gap-4 md:grid-cols-2">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-40 rounded-2xl bg-neutral-100" />
+            <div key={index} className="h-48 rounded-2xl bg-neutral-100" />
           ))}
         </div>
       </div>
@@ -144,9 +167,9 @@ export default function MarketplacePage() {
     <div className="min-h-screen bg-[#F5F0EB]">
       <Nav />
       <motion.main
-        initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
+        initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
         className="pt-28 pb-24"
       >
         {loading ? (
@@ -167,22 +190,44 @@ export default function MarketplacePage() {
           </div>
         ) : user?.role === "FARMER" ? (
           <div className="mx-auto w-full max-w-4xl px-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h1 className="font-[family-name:var(--font-manrope)] text-3xl font-extrabold text-neutral-900">
-                  My Cases
-                </h1>
-                <p className="mt-2 text-sm text-neutral-500">
-                  Track your submissions and review vendor bids.
-                </p>
+            <section className="relative overflow-hidden rounded-[32px] border border-neutral-200 bg-white px-8 py-10 shadow-[0_30px_80px_-60px_rgba(0,0,0,0.4)]">
+              <div className="absolute right-0 top-0 h-52 w-52 -translate-y-10 translate-x-16 rounded-full bg-[#c7f1d2] opacity-50 blur-3xl" />
+              <div className="absolute bottom-0 left-0 h-52 w-52 -translate-x-16 translate-y-16 rounded-full bg-[#f1dcc7] opacity-60 blur-3xl" />
+              <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+                <div>
+                  <div className="inline-flex rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-[#16a34a]">
+                    Farmer workspace
+                  </div>
+                  <h1 className="mt-4 font-[family-name:var(--font-manrope)] text-4xl font-bold text-neutral-900">
+                    Track your crop cases and vendor bids in one place.
+                  </h1>
+                  <p className="mt-3 max-w-xl text-sm text-neutral-500">
+                    Keep an eye on open requests, review vendor proposals, and publish new cases
+                    directly from your diagnosis results.
+                  </p>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <a
+                      href="/diagnose"
+                      className="rounded-full bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white"
+                    >
+                      Post New Case →
+                    </a>
+                    <a
+                      href="/profile"
+                      className="rounded-full border border-neutral-200 bg-white px-5 py-2 text-sm font-semibold text-neutral-700"
+                    >
+                      Update Farm Profile
+                    </a>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <StatCard label="Total Cases" value={farmerStats.total} />
+                  <StatCard label="Open Cases" value={farmerStats.open} delay={0.05} />
+                  <StatCard label="In Progress" value={farmerStats.inProgress} delay={0.1} />
+                  <StatCard label="Total Bids" value={farmerStats.bids} delay={0.15} />
+                </div>
               </div>
-              <a
-                href="/diagnose"
-                className="rounded-full bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white"
-              >
-                Post New Case →
-              </a>
-            </div>
+            </section>
 
             {farmerCases.length === 0 ? (
               <div className="mt-8 rounded-3xl border border-dashed border-neutral-200 bg-white p-10 text-center">
@@ -203,34 +248,85 @@ export default function MarketplacePage() {
                 </a>
               </div>
             ) : (
-              <div className="mt-8 space-y-6">
-                {farmerCases.map((caseItem, index) => (
-                  <div key={caseItem.id} className="space-y-4">
+              <div className="mt-10 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">
+                    Your active cases
+                  </h2>
+                  <span className="text-xs uppercase tracking-[0.2em] text-neutral-400">
+                    {farmerCases.length} total
+                  </span>
+                </div>
+                <div className="space-y-6">
+                  {farmerCases.map((caseItem, index) => (
                     <CaseCard
+                      key={caseItem.id}
                       caseItem={caseItem}
                       index={index}
                       onClick={() =>
                         setSelectedCaseId((value) => (value === caseItem.id ? null : caseItem.id))
                       }
                     />
-                    {selectedCaseId === caseItem.id ? (
-                      <CaseDetail id={caseItem.id} viewerRole="FARMER" />
-                    ) : null}
+                  ))}
+                </div>
+                {selectedCaseId ? (
+                  <div className="pt-6">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h3 className="font-[family-name:var(--font-manrope)] text-xl font-bold text-neutral-900">
+                        Case details
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCaseId(null)}
+                        className="text-xs font-semibold text-neutral-400 transition hover:text-neutral-700"
+                      >
+                        Hide details
+                      </button>
+                    </div>
+                    <CaseDetail id={selectedCaseId} viewerRole="FARMER" />
                   </div>
-                ))}
+                ) : null}
               </div>
             )}
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-4xl px-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <StatCard label="Open Cases" value={vendorStats?.openCases ?? 0} />
-              <StatCard label="My Active Bids" value={vendorStats?.activeBids ?? 0} />
-              <StatCard label="Won Cases" value={vendorStats?.wonCases ?? 0} />
+          <div className="mx-auto w-full max-w-5xl px-6 py-10">
+            <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <span className="mb-2 inline-block rounded-full border border-green-100 bg-green-50 px-3 py-1 text-xs text-green-700">
+                  🌿 Open Marketplace
+                </span>
+                <h1 className="font-[family-name:var(--font-manrope)] text-3xl font-extrabold tracking-tight text-neutral-900">
+                  Pick the next case to treat
+                </h1>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Filter by urgency or location to find the right match
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href="/vendor/bids"
+                  className="rounded-full border border-neutral-200 px-5 py-2.5 text-sm text-neutral-600 transition hover:bg-neutral-50"
+                >
+                  View My Bids →
+                </a>
+                <a
+                  href="/vendor/profile"
+                  className="rounded-full border border-neutral-200 px-5 py-2.5 text-sm text-neutral-600 transition hover:bg-neutral-50"
+                >
+                  Update Profile
+                </a>
+              </div>
             </div>
-            <div className="mt-6">
-              <MarketplaceFeed />
+
+            <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <StatCard label="Open Cases" value={vendorStats?.openCases ?? 0} helper="cases available" />
+              <StatCard label="My Active Bids" value={vendorStats?.activeBids ?? 0} helper="in review" delay={0.05} />
+              <StatCard label="Won Cases" value={vendorStats?.wonCases ?? 0} helper="in escrow" delay={0.1} />
+              <StatCard label="Response Time" value="< 24h" helper="avg vendor reply" delay={0.15} />
             </div>
+
+            <MarketplaceFeed />
           </div>
         )}
       </motion.main>
