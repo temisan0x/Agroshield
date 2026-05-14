@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "emilkowal-animations": {
+      "source": "pproenca/dot-skills",
+      "sourceType": "github",
+      "skillPath": "skills/.experimental/emilkowal-animations/SKILL.md",
+      "computedHash": "20707704c3dacfe6e60d1b3cade7124bc7295d64b6b1ca762d71d810f70af3c8"
+    }
+  }
+}
