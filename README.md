@@ -1,36 +1,106 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AgroShield
 
-## Getting Started
+Trustless crop treatment marketplace for farmers and vendors. Includes AI-powered diagnosis (Gemini 2.0 Flash), Prisma + PostgreSQL, JWT auth, and Trustless Work escrow on Stellar testnet.
 
-First, run the development server:
+## Tech Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js 15 App Router (TypeScript)
+- Prisma ORM + PostgreSQL
+- Google Gemini 2.0 Flash (vision diagnosis)
+- JWT auth (jose)
+- bcryptjs (password hashing)
+- Trustless Work REST API (testnet escrow)
+
+## Prerequisites
+
+- Node.js 20+
+- PostgreSQL database
+- Trustless Work testnet API key
+- Gemini API key
+- Stellar wallet (Freighter) for signing XDR on the frontend
+
+## Environment Variables
+
+Create a `.env` file in the project root:
+
+```
+GEMINI_API_KEY=your_gemini_key
+DATABASE_URL=your_postgres_url
+JWT_SECRET=agroshield-jwt-secret-2026
+TRUSTLESS_WORK_API_KEY=your_trustless_work_testnet_key
+PLATFORM_WALLET_ADDRESS=GDEMO...your_platform_wallet
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Install
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Prisma Setup
 
-## Learn More
+```
+npx prisma generate
+npx prisma db push
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Run Locally
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open http://localhost:3000
 
-## Deploy on Vercel
+## Core API Routes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Auth
+- POST /api/auth/register
+- POST /api/auth/login
+- GET /api/auth/me
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Diagnosis
+- POST /api/diagnose
+
+Cases
+- POST /api/cases/create
+- GET /api/cases
+- GET /api/cases/[id]
+
+Bids
+- POST /api/bids/create
+- GET /api/bids/[caseId]
+
+Escrow (Trustless Work)
+- POST /api/escrow/create
+- POST /api/escrow/confirm
+- POST /api/escrow/fund
+- GET /api/escrow/status/[id]
+- POST /api/escrow/release
+
+Treatment Flow
+- POST /api/mark-treatment-done
+- POST /api/verify-treatment
+
+Disputes
+- POST /api/disputes/create
+- GET /api/disputes/[id]
+- POST /api/disputes/resolve
+
+## Trustless Work Flow (Important)
+
+Trustless Work returns unsigned XDR transactions. The backend returns these unsigned XDRs to the frontend. The frontend signs using Freighter and submits to Trustless Work /helper/send-transaction.
+
+Escrow type used: SINGLE-RELEASE
+
+Role mapping:
+- Farmer = Depositor + Approver
+- Vendor = Service Provider + Receiver
+- Platform = Fee recipient + Dispute resolver
+
+## Notes
+
+- All passwords are stored as bcrypt hashes.
+- JWTs expire after 7 days.
+- Diagnosis data is stored as JSON string and parsed on read.
+- Trustless Work errors fall back to a demo unsigned XDR so the demo can still proceed.
