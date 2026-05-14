@@ -1,8 +1,32 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 
+const fallbackAvatar = (
+  <svg viewBox="0 0 40 40" aria-hidden="true" className="h-9 w-9 text-neutral-400">
+    <rect width="40" height="40" rx="20" fill="currentColor" opacity="0.2" />
+    <circle cx="20" cy="15" r="6" fill="currentColor" opacity="0.55" />
+    <path
+      d="M8 33c2.5-6.5 8-9.5 12-9.5s9.5 3 12 9.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
 export default function Nav() {
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("agroshield_token");
+    setIsAuthed(Boolean(token));
+    setHydrated(true);
+  }, []);
+
   return (
     <motion.nav
       initial={{ opacity: 0, y: -12 }}
@@ -32,16 +56,27 @@ export default function Nav() {
             <a className="transition hover:text-white" href="/diagnose">
               Diagnose
             </a>
-            <a className="transition hover:text-white" href="/login">
-              Log in
-            </a>
+            {hydrated && !isAuthed ? (
+              <a className="transition hover:text-white" href="/login">
+                Log in
+              </a>
+            ) : null}
           </div>
-          <a
-            className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-neutral-900"
-            href="/signup"
-          >
-            Get started
-          </a>
+          {hydrated && !isAuthed ? (
+            <a
+              className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-neutral-900"
+              href="/signup"
+            >
+              Get started
+            </a>
+          ) : null}
+          {hydrated && isAuthed ? (
+            <div className="flex items-center gap-3 text-sm text-neutral-100">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
+                {fallbackAvatar}
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
     </motion.nav>

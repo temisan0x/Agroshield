@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 
 export default function DiagnosePage() {
   const reduceMotion = useReducedMotion();
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [freeRemaining, setFreeRemaining] = useState(3);
   const [showGate, setShowGate] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -16,7 +18,13 @@ export default function DiagnosePage() {
   const [error, setError] = useState<string | null>(null);
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
 
-  const canRun = useMemo(() => freeRemaining > 0, [freeRemaining]);
+  useEffect(() => {
+    const token = localStorage.getItem("agroshield_token");
+    setIsAuthed(Boolean(token));
+    setHydrated(true);
+  }, []);
+
+  const canRun = useMemo(() => (isAuthed ? true : freeRemaining > 0), [isAuthed, freeRemaining]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -140,9 +148,11 @@ export default function DiagnosePage() {
                   >
                     {isLoading ? "Analyzing..." : "Run diagnosis"}
                   </button>
-                  <a className="text-sm text-neutral-500 underline" href="/signup">
-                    Create account for unlimited use
-                  </a>
+                  {hydrated && !isAuthed ? (
+                    <a className="text-sm text-neutral-500 underline" href="/signup">
+                      Create account for unlimited use
+                    </a>
+                  ) : null}
                 </div>
 
                 {error ? (
@@ -188,17 +198,21 @@ export default function DiagnosePage() {
               <div className="h-fit self-start rounded-2xl border border-neutral-100 bg-white p-6 shadow-sm">
                 <div className="text-xs text-neutral-400">Free diagnoses remaining</div>
                 <div className="mt-2 font-[family-name:var(--font-manrope)] text-3xl font-bold text-neutral-900">
-                  {freeRemaining}
+                  {isAuthed ? "Unlimited" : freeRemaining}
                 </div>
                 <div className="mt-4 text-sm text-neutral-500">
-                  After the free limit, sign in to unlock unlimited diagnoses and escrow tools.
+                  {isAuthed
+                    ? "You are signed in and can run unlimited diagnoses."
+                    : "After the free limit, sign in to unlock unlimited diagnoses and escrow tools."}
                 </div>
-                <a
-                  className="mt-6 inline-flex rounded-full bg-[#16a34a] px-4 py-2 text-xs font-semibold text-white"
-                  href="/login"
-                >
-                  Log in
-                </a>
+                {hydrated && !isAuthed ? (
+                  <a
+                    className="mt-6 inline-flex rounded-full bg-[#16a34a] px-4 py-2 text-xs font-semibold text-white"
+                    href="/login"
+                  >
+                    Log in
+                  </a>
+                ) : null}
               </div>
             </div>
           </motion.div>
