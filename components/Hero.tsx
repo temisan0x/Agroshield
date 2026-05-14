@@ -30,7 +30,7 @@ export default function Hero() {
           variants={fadeUp}
           className="mt-6 font-[family-name:var(--font-manrope)] text-5xl font-extrabold tracking-tight text-neutral-900 md:text-6xl"
         >
-          Protect your crops. Pay only when it works.
+          Discover active crop cases and verified vendor opportunities.
         </motion.h1>
         <motion.p
           initial="hidden"

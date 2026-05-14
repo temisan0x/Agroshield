@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #f5f0eb;
   --foreground: #171717;
   --font-inter: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-manrope: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -13,13 +13,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-manrope);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
