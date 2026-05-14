@@ -1,15 +1,17 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
+import type { ReactNode } from "react";
 import type { CaseListItem } from "./types";
 
 interface CaseCardProps {
   caseItem: CaseListItem;
   index?: number;
   onClick?: () => void;
+  action?: ReactNode;
 }
 
-export default function CaseCard({ caseItem, index = 0, onClick }: CaseCardProps) {
+export default function CaseCard({ caseItem, index = 0, onClick, action }: CaseCardProps) {
   const reduceMotion = useReducedMotion();
   const disease = caseItem.diagnosis?.disease ?? "Undiagnosed";
   const confidence = caseItem.diagnosis?.confidence;
@@ -98,6 +100,12 @@ export default function CaseCard({ caseItem, index = 0, onClick }: CaseCardProps
           <span>{date}</span>
           <span>{caseItem._count.bids} bid{caseItem._count.bids !== 1 ? "s" : ""}</span>
         </div>
+
+        {action ? (
+          <div className="mt-4 flex justify-end" onClick={(event) => event.stopPropagation()}>
+            {action}
+          </div>
+        ) : null}
       </div>
     </motion.div>
   );

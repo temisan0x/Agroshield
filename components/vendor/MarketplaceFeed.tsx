@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, useReducedMotion, AnimatePresence } from "motion/react";
 import type { CaseListItem } from "./types";
 import CaseCard from "./CaseCard";
+import BidModal from "./BidModal";
 
 type QuickFilter = "all" | "high" | "near";
 
@@ -16,6 +17,8 @@ export default function MarketplaceFeed() {
   const [error, setError] = useState<string | null>(null);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [search, setSearch] = useState("");
+  const [bidCaseId, setBidCaseId] = useState<string | null>(null);
+  const [placedBids, setPlacedBids] = useState<Record<string, boolean>>({});
 
   const fetchCases = useCallback(async () => {
     try {
@@ -31,6 +34,14 @@ export default function MarketplaceFeed() {
   }, []);
 
   useEffect(() => { fetchCases(); }, [fetchCases]);
+
+  const handleBidSuccess = useCallback(
+    (caseId: string) => {
+      setPlacedBids((prev) => ({ ...prev, [caseId]: true }));
+      fetchCases();
+    },
+    [fetchCases]
+  );
 
   const filtered = cases.filter((c) => {
     if (c.status !== "OPEN") return false;
@@ -115,7 +126,29 @@ export default function MarketplaceFeed() {
             {filtered.length > 0 ? (
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {filtered.map((c, i) => (
-                  <CaseCard key={c.id} caseItem={c} index={i} onClick={() => router.push(`/vendor/cases/${c.id}`)} />
+                  <CaseCard
+                    key={c.id}
+                    caseItem={c}
+                    index={i}
+                    onClick={() => router.push(`/vendor/cases/${c.id}`)}
+                    action={
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setBidCaseId(c.id);
+                        }}
+                        disabled={placedBids[c.id]}
+                        className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                          placedBids[c.id]
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-neutral-900 text-white hover:bg-neutral-800"
+                        }`}
+                      >
+                        {placedBids[c.id] ? "Bid placed" : "Place bid"}
+                      </button>
+                    }
+                  />
                 ))}
               </div>
             ) : (
@@ -129,6 +162,16 @@ export default function MarketplaceFeed() {
           </AnimatePresence>
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {bidCaseId ? (
+          <BidModal
+            caseId={bidCaseId}
+            onClose={() => setBidCaseId(null)}
+            onSuccess={() => handleBidSuccess(bidCaseId)}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
