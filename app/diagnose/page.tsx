@@ -14,6 +14,7 @@ export default function DiagnosePage() {
   const [diagnosis, setDiagnosis] = useState<Record<string, unknown> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
 
   const canRun = useMemo(() => freeRemaining > 0, [freeRemaining]);
 
@@ -48,6 +49,7 @@ export default function DiagnosePage() {
   const handleRun = async () => {
     if (!canRun) {
       setShowGate(true);
+      setShowSignupPrompt(true);
       return;
     }
 
@@ -75,6 +77,9 @@ export default function DiagnosePage() {
 
       setDiagnosis(data.diagnosis);
       setFreeRemaining((value) => Math.max(0, value - 1));
+      if (freeRemaining <= 1) {
+        setShowSignupPrompt(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -199,6 +204,34 @@ export default function DiagnosePage() {
           </motion.div>
         </div>
       </main>
+      {showSignupPrompt ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-6">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-100 bg-white p-6 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-neutral-400">Create account</div>
+            <h2 className="mt-2 font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">
+              Unlock unlimited diagnoses
+            </h2>
+            <p className="mt-2 text-sm text-neutral-500">
+              You have used the free diagnoses. Create an account to keep analyzing crops and
+              access escrow tools.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a
+                href="/signup"
+                className="rounded-full bg-neutral-900 px-5 py-2 text-sm font-medium text-white"
+              >
+                Create account
+              </a>
+              <button
+                onClick={() => setShowSignupPrompt(false)}
+                className="rounded-full border border-neutral-200 px-5 py-2 text-sm text-neutral-600"
+              >
+                Maybe later
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <Footer />
     </div>
   );

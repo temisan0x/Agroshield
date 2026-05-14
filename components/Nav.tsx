@@ -29,6 +29,9 @@ export default function Nav() {
             <a className="transition hover:text-white" href="/#vendors">
               For Vendors
             </a>
+            <a className="transition hover:text-white" href="/diagnose">
+              Diagnose
+            </a>
             <a className="transition hover:text-white" href="/login">
               Log in
             </a>
