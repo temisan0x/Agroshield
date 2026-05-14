@@ -213,7 +213,6 @@ export default function VendorProfile() {
 
   return (
     <>
-      <Nav />
       <div className="min-h-[calc(100vh-140px)] bg-[#F5F0EB] pt-28 pb-16">
         <div className="mx-auto max-w-6xl px-6">
           <div className="relative overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_30px_80px_-60px_rgba(0,0,0,0.4)]">
@@ -279,7 +278,6 @@ export default function VendorProfile() {
           )}
         </div>
       </div>
-      <Footer />
     </>
   );
 }
