@@ -20,6 +20,7 @@ model User {
   createdAt     DateTime @default(now())
   cases         Case[]
   bids          Bid[]
+  vendorProfile  VendorProfile?
 }
 
 model Case {
@@ -76,4 +77,18 @@ model Dispute {
   status     String   @default("OPEN")
   resolvedBy String?
   createdAt  DateTime @default(now())
+}
+
+model VendorProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  businessName     String?
+  bio              String?
+  specialization   String?
+  experienceYears  Int?
+  location         String?
+  phone            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
