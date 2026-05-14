@@ -1,11 +1,55 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 
 export default function SignupPage() {
   const reduceMotion = useReducedMotion();
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("Farmer");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    if (!email || !password) {
+      setError("Please enter your email and password.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          role: role.toUpperCase(),
+        }),
+      });
+
+      const data = (await response.json()) as { token?: string; error?: string };
+      if (!response.ok || !data.token) {
+        throw new Error(data.error ?? "Signup failed. Please try again.");
+      }
+
+      localStorage.setItem("agroshield_token", data.token);
+      router.push("/diagnose");
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Signup failed.";
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F0EB]">
@@ -29,12 +73,14 @@ export default function SignupPage() {
                 Unlock unlimited diagnoses, verified vendor support, and escrow protection.
               </p>
 
-              <form className="mt-8 space-y-5">
+              <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                 <div>
                   <label className="text-sm font-medium text-neutral-700">Email</label>
                   <input
                     type="email"
                     placeholder="you@farm.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
                     className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#d5ebff]"
                   />
                 </div>
@@ -43,21 +89,33 @@ export default function SignupPage() {
                   <input
                     type="password"
                     placeholder="Create a strong password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
                     className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#d5ebff]"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-neutral-700">Role</label>
-                  <select className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#d5ebff]">
+                  <select
+                    value={role}
+                    onChange={(event) => setRole(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#d5ebff]"
+                  >
                     <option>Farmer</option>
                     <option>Vendor</option>
                   </select>
                 </div>
+                {error ? (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
+                    {error}
+                  </div>
+                ) : null}
                 <button
-                  type="button"
-                  className="w-full rounded-2xl bg-neutral-900 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full rounded-2xl bg-neutral-900 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  Create account
+                  {isSubmitting ? "Creating account..." : "Create account"}
                 </button>
               </form>
 
