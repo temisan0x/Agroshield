@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
+import { generateUsernameFromEmail } from "@/lib/username";
 
 export async function POST(request: Request) {
   try {
@@ -21,9 +22,11 @@ export async function POST(request: Request) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const username = await generateUsernameFromEmail(email);
     const user = await prisma.user.create({
       data: {
         email,
+        username,
         passwordHash,
         role,
         walletAddress,
@@ -31,6 +34,7 @@ export async function POST(request: Request) {
       select: {
         id: true,
         email: true,
+        username: true,
         role: true,
         walletAddress: true,
       },

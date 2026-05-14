@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import { useAuthStatus, useHydrated } from "@/lib/auth-client";
 
 export default function DiagnosePage() {
   const reduceMotion = useReducedMotion();
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
+  const isAuthed = useAuthStatus();
+  const hydrated = useHydrated();
   const [freeRemaining, setFreeRemaining] = useState(3);
   const [showGate, setShowGate] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -17,12 +18,6 @@ export default function DiagnosePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
-
-  useEffect(() => {
-    const token = localStorage.getItem("agroshield_token");
-    setIsAuthed(Boolean(token));
-    setHydrated(true);
-  }, []);
 
   const canRun = useMemo(() => (isAuthed ? true : freeRemaining > 0), [isAuthed, freeRemaining]);
 
