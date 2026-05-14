@@ -49,9 +49,12 @@ export default function Hero() {
           variants={fadeUp}
           className="mt-8 flex flex-wrap items-center gap-4"
         >
-          <button className="rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white md:text-base">
+          <a
+            className="rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white md:text-base"
+            href="/diagnose"
+          >
             Upload a crop photo →
-          </button>
+          </a>
           <a className="text-sm text-neutral-500 underline md:text-base" href="#how">
             See how it works
           </a>
