@@ -1,10 +1,12 @@
 import Nav from "@/components/Nav";
 import Hero from "@/components/Hero";
 import Bento from "@/components/Bento";
-import Section from "@/components/Section";
 import CTA from "@/components/CTA";
 import Footer from "@/components/Footer";
-import FeatureCard from "@/components/FeatureCard";
+import SectionFeature from "@/components/marketplace/SectionFeature";
+import FarmerCaseVisual from "@/components/marketplace/FarmerCaseVisual";
+import VendorBidVisual from "@/components/marketplace/VendorBidVisual";
+import EscrowVisual from "@/components/marketplace/EscrowVisual";
 
 export default function Home() {
   return (
@@ -12,38 +14,25 @@ export default function Home() {
       <Nav />
       <Hero />
       <Bento />
-      <Section
-        id="farmers"
+      <SectionFeature
         label="🌾 For Farmers"
         heading="Upload. Diagnose. Get treated."
-        subheading="No more guessing what's wrong with your crops. Get expert diagnosis instantly and pay only when the job is done."
-      >
-        <FeatureCard
-          title="Instant AI Diagnosis"
-          description="Upload a photo and get results in seconds."
-        />
-        <FeatureCard
-          title="Verified Vendors"
-          description="Only trusted local agronomists and vendors."
-        />
-        <FeatureCard
-          title="Protected Payments"
-          description="Escrow holds funds until delivery is confirmed."
-        />
-      </Section>
-      <Section
-        id="vendors"
+        subtext="No more guessing what's wrong with your crops. Get expert AI diagnosis instantly and only pay when treatment is confirmed delivered."
+        visual={<FarmerCaseVisual />}
+      />
+      <SectionFeature
         label="🏪 For Vendors"
         heading="Bid on cases. Get paid guaranteed."
-        subheading="Browse open cases from farmers near you. Submit proposals. Escrow guarantees you get paid when you deliver."
-      >
-        <FeatureCard title="Browse Cases" description="See nearby farmer cases in real time." />
-        <FeatureCard title="Place Bids" description="Submit your proposal and price." />
-        <FeatureCard
-          title="Guaranteed Payment"
-          description="Smart contract releases funds on confirmation."
-        />
-      </Section>
+        subtext="Browse open cases from farmers near you. Submit your proposal and price. Smart contract guarantees payment when you deliver."
+        visual={<VendorBidVisual />}
+        reverse
+      />
+      <SectionFeature
+        label="🔒 Trustless Escrow"
+        heading="Funds locked until treatment works."
+        subtext="Built on Stellar using Trustless Work. Escrow holds funds in a smart contract — released automatically when farmer confirms treatment."
+        visual={<EscrowVisual />}
+      />
       <CTA />
       <Footer />
     </div>

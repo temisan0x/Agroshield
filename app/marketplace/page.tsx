@@ -1,98 +1,239 @@
-import { prisma } from "@/lib/prisma";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
-import MarketplaceBrowser from "@/components/MarketplaceBrowser";
+import MarketplaceFeed from "@/components/vendor/MarketplaceFeed";
+import CaseCard from "@/components/vendor/CaseCard";
+import CaseDetail from "@/components/vendor/CaseDetail";
+import StatCard from "@/components/vendor/StatCard";
+import type { CaseListItem } from "@/components/vendor/types";
+import { useAuthStatus, useHydrated } from "@/lib/auth-client";
 
-export const dynamic = "force-dynamic";
-
-type MarketplaceCaseEntry = {
+type UserSummary = {
   id: string;
-  imageUrl: string;
-  diagnosis: string | null;
-  status: string;
-  createdAt: Date;
-  farmer: { email: string };
-  bids: Array<{
-    amount: { toString(): string };
-    createdAt: Date;
-  }>;
+  role: "FARMER" | "VENDOR";
+  email: string;
 };
 
-type MarketplaceBidEntry = MarketplaceCaseEntry["bids"][number];
-
-type Diagnosis = {
-  disease?: string;
-  crop?: string;
-  urgency?: string;
-  symptoms?: string;
-  treatment?: string;
+type VendorStats = {
+  openCases: number;
+  activeBids: number;
+  wonCases: number;
 };
 
-function parseDiagnosis(value: string | null): Diagnosis | null {
-  if (!value) return null;
+export default function MarketplacePage() {
+  const reduceMotion = useReducedMotion();
+  const hydrated = useHydrated();
+  const isAuthed = useAuthStatus();
+  const [user, setUser] = useState<UserSummary | null>(null);
+  const [cases, setCases] = useState<CaseListItem[]>([]);
+  const [vendorStats, setVendorStats] = useState<VendorStats | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  try {
-    return JSON.parse(value) as Diagnosis;
-  } catch {
-    return null;
-  }
-}
+  const fetchUser = async () => {
+    const token = localStorage.getItem("agroshield_token");
+    if (!token) {
+      setUser(null);
+      return null;
+    }
 
-function formatCurrency(value: number | null) {
-  if (value == null || Number.isNaN(value)) return null;
+    const response = await fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = (await response.json()) as { user?: UserSummary; error?: string };
+    if (!response.ok || !payload.user) {
+      throw new Error(payload.error ?? "Failed to load user.");
+    }
+    setUser(payload.user);
+    return payload.user;
+  };
 
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+  const fetchCases = async () => {
+    const response = await fetch("/api/cases");
+    const payload = (await response.json()) as { cases?: CaseListItem[]; error?: string };
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Failed to load cases.");
+    }
+    setCases(payload.cases ?? []);
+  };
 
-export default async function MarketplacePage() {
-  const cases = await prisma.case.findMany({
-    where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
-    include: {
-      farmer: { select: { email: true } },
-      bids: {
-        select: { amount: true, createdAt: true },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const fetchVendorStats = async () => {
+    const token = localStorage.getItem("agroshield_token");
+    if (!token) {
+      setVendorStats({ openCases: 0, activeBids: 0, wonCases: 0 });
+      return;
+    }
 
-  const listings = cases.map((entry: MarketplaceCaseEntry) => {
-    const diagnosis = parseDiagnosis(entry.diagnosis);
-    const amounts = entry.bids
-      .map((bid: MarketplaceBidEntry) => Number(bid.amount.toString()))
-      .filter((value: number) => !Number.isNaN(value));
-    const lowestBid = amounts.length > 0 ? Math.min(...amounts) : null;
-    const latestBid = amounts.length > 0 ? amounts[0] : null;
+    const [casesRes, profileRes] = await Promise.all([
+      fetch("/api/cases"),
+      fetch("/api/profile/summary", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
 
-    return {
-      id: entry.id,
-      imageUrl: entry.imageUrl,
-      title: diagnosis?.disease ?? diagnosis?.crop ?? "Crop support case",
-      crop: diagnosis?.crop ?? "General crop",
-      disease: diagnosis?.disease ?? "Diagnosis pending",
-      urgency: diagnosis?.urgency ?? "Medium urgency",
-      status: entry.status,
-      farmerEmail: entry.farmer.email,
-      createdAt: entry.createdAt.toISOString(),
-      bidCount: entry.bids.length,
-      latestBid: formatCurrency(latestBid),
-      lowestBid: formatCurrency(lowestBid),
-      summary:
-        diagnosis?.treatment ??
-        diagnosis?.symptoms ??
-        "Browse the case, review the crop context, and submit a treatment proposal.",
+    const casesPayload = (await casesRes.json()) as { cases?: CaseListItem[] };
+    const profilePayload = (await profileRes.json()) as {
+      profile?: { stats?: Array<{ label: string; value: string }> };
+      error?: string;
     };
-  });
+
+    if (!casesRes.ok || !profileRes.ok || !profilePayload.profile) {
+      throw new Error(profilePayload.error ?? "Failed to load vendor stats.");
+    }
+
+    const openCases = (casesPayload.cases ?? []).filter((entry) => entry.status === "OPEN").length;
+    const stats = profilePayload.profile.stats ?? [];
+    const activeBids = Number(stats.find((s) => s.label === "Bids placed")?.value ?? 0);
+    const wonCases = Number(stats.find((s) => s.label === "Selected wins")?.value ?? 0);
+
+    setVendorStats({ openCases, activeBids, wonCases });
+  };
+
+  const loadMarketplace = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let resolvedUser: UserSummary | null = null;
+      if (hydrated && isAuthed) {
+        resolvedUser = await fetchUser();
+      } else {
+        setUser(null);
+      }
+
+      await fetchCases();
+
+      if (resolvedUser?.role === "VENDOR") {
+        await fetchVendorStats();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    loadMarketplace();
+  }, [hydrated, isAuthed]);
+
+  const farmerCases = useMemo(() => {
+    if (!user?.id) return [];
+    return cases.filter((entry) => entry.farmerId === user.id);
+  }, [cases, user?.id]);
+
+  const renderLoading = () => (
+    <div className="mx-auto w-full max-w-4xl px-6">
+      <div className="animate-pulse space-y-6 rounded-[28px] border border-neutral-200 bg-white p-6 shadow-sm">
+        <div className="h-6 w-32 rounded-full bg-neutral-100" />
+        <div className="h-10 w-full rounded-2xl bg-neutral-100" />
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-40 rounded-2xl bg-neutral-100" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#F5F0EB]">
       <Nav />
-      <MarketplaceBrowser listings={listings} />
+      <motion.main
+        initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="pt-28 pb-24"
+      >
+        {loading ? (
+          renderLoading()
+        ) : error ? (
+          <div className="mx-auto max-w-4xl px-6">
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-8 text-center">
+              <p className="text-sm font-semibold text-red-700">Marketplace error</p>
+              <p className="mt-2 text-xs text-red-600">{error}</p>
+              <button
+                type="button"
+                onClick={loadMarketplace}
+                className="mt-4 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : user?.role === "FARMER" ? (
+          <div className="mx-auto w-full max-w-4xl px-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h1 className="font-[family-name:var(--font-manrope)] text-3xl font-extrabold text-neutral-900">
+                  My Cases
+                </h1>
+                <p className="mt-2 text-sm text-neutral-500">
+                  Track your submissions and review vendor bids.
+                </p>
+              </div>
+              <a
+                href="/diagnose"
+                className="rounded-full bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white"
+              >
+                Post New Case →
+              </a>
+            </div>
+
+            {farmerCases.length === 0 ? (
+              <div className="mt-8 rounded-3xl border border-dashed border-neutral-200 bg-white p-10 text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#F5F0EB] text-2xl">
+                  🌿
+                </div>
+                <h2 className="mt-4 font-[family-name:var(--font-manrope)] text-xl font-bold text-neutral-900">
+                  No cases yet
+                </h2>
+                <p className="mt-2 text-sm text-neutral-500">
+                  Upload your first crop photo to start receiving bids.
+                </p>
+                <a
+                  href="/diagnose"
+                  className="mt-5 inline-flex rounded-full bg-neutral-900 px-5 py-2 text-xs font-semibold text-white"
+                >
+                  Upload your first crop photo
+                </a>
+              </div>
+            ) : (
+              <div className="mt-8 space-y-6">
+                {farmerCases.map((caseItem, index) => (
+                  <div key={caseItem.id} className="space-y-4">
+                    <CaseCard
+                      caseItem={caseItem}
+                      index={index}
+                      onClick={() =>
+                        setSelectedCaseId((value) => (value === caseItem.id ? null : caseItem.id))
+                      }
+                    />
+                    {selectedCaseId === caseItem.id ? (
+                      <CaseDetail id={caseItem.id} viewerRole="FARMER" />
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-4xl px-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              <StatCard label="Open Cases" value={vendorStats?.openCases ?? 0} />
+              <StatCard label="My Active Bids" value={vendorStats?.activeBids ?? 0} />
+              <StatCard label="Won Cases" value={vendorStats?.wonCases ?? 0} />
+            </div>
+            <div className="mt-6">
+              <MarketplaceFeed />
+            </div>
+          </div>
+        )}
+      </motion.main>
       <Footer />
     </div>
   );

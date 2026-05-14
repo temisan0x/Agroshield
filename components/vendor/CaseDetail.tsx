@@ -2,19 +2,26 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, useReducedMotion, AnimatePresence } from "motion/react";
-import type { CaseDetailData } from "./types";
+import type { BidOnCase, CaseDetailData } from "./types";
+import { deriveBidStatus } from "./types";
 import BidModal from "./BidModal";
+import BidRow from "./BidRow";
+import { signTransaction, isConnected } from "@stellar/freighter-api";
 
 interface CaseDetailProps {
   id: string;
+  viewerRole?: "FARMER" | "VENDOR";
 }
 
-export default function CaseDetail({ id }: CaseDetailProps) {
+export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProps) {
   const reduceMotion = useReducedMotion();
   const [caseData, setCaseData] = useState<CaseDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bidOpen, setBidOpen] = useState(false);
+  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
+  const [escrowError, setEscrowError] = useState<string | null>(null);
+  const [escrowNotice, setEscrowNotice] = useState<string | null>(null);
 
   const fetchCase = useCallback(async () => {
     try {
@@ -61,8 +68,88 @@ export default function CaseDetail({ id }: CaseDetailProps) {
     month: "long", day: "numeric", year: "numeric",
   });
 
+  const handleAcceptBid = async (bid: BidOnCase) => {
+    setEscrowError(null);
+    setEscrowNotice(null);
+    setAcceptingBidId(bid.id);
+
+    try {
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) {
+        throw new Error("Please log in again to continue.");
+      }
+
+      const createRes = await fetch("/api/escrow/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ caseId: caseData.id, bidId: bid.id }),
+      });
+
+      const createData = (await createRes.json()) as {
+        unsignedTransaction?: string;
+        escrowId?: string;
+        error?: string;
+      };
+
+      if (!createRes.ok || !createData.unsignedTransaction || !createData.escrowId) {
+        throw new Error(createData.error ?? "Failed to create escrow.");
+      }
+
+      const freighterReady = await isConnected().catch(() => false);
+      if (!freighterReady) {
+        setEscrowNotice("Install Freighter wallet to continue.");
+        return;
+      }
+
+      const signedXdr = await signTransaction(createData.unsignedTransaction);
+
+      const sendRes = await fetch("https://dev.api.trustlesswork.com/helper/send-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ xdr: signedXdr }),
+      });
+
+      const sendData = (await sendRes.json().catch(() => ({}))) as {
+        contractId?: string;
+        result?: { contractId?: string };
+      };
+
+      if (!sendRes.ok) {
+        throw new Error("Failed to broadcast escrow transaction.");
+      }
+
+      const contractId = sendData.contractId ?? sendData.result?.contractId;
+      if (!contractId) {
+        throw new Error("Missing contract ID from escrow transaction.");
+      }
+
+      const confirmRes = await fetch("/api/escrow/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ escrowId: createData.escrowId, contractId }),
+      });
+
+      if (!confirmRes.ok) {
+        const confirmData = await confirmRes.json().catch(() => ({}));
+        throw new Error(confirmData.error ?? "Failed to confirm escrow.");
+      }
+
+      await fetchCase();
+    } catch (err) {
+      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setAcceptingBidId(null);
+    }
+  };
+
   return (
-    <div className="mx-auto max-w-6xl px-6">
+    <div className="mx-auto max-w-4xl px-6">
       <motion.div
         initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -118,7 +205,7 @@ export default function CaseDetail({ id }: CaseDetailProps) {
               <InfoRow label="Current Bids" value={String(caseData.bids.length)} />
             </div>
 
-            {caseData.status === "OPEN" && (
+            {caseData.status === "OPEN" && viewerRole === "VENDOR" && (
               <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }}
                 onClick={() => setBidOpen(true)}
                 className="mt-8 w-full rounded-2xl bg-neutral-900 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-neutral-800">
@@ -152,29 +239,49 @@ export default function CaseDetail({ id }: CaseDetailProps) {
             </p>
           </div>
           <div className="space-y-3 px-8 py-6">
-            {caseData.bids.map((bid, i) => (
-              <motion.div key={bid.id}
-                initial={reduceMotion ? { opacity: 1 } : { opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.35, delay: i * 0.07 }}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 bg-white px-5 py-4 transition hover:shadow-sm"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-neutral-900">{bid.vendor.email}</p>
-                  <p className="mt-0.5 line-clamp-1 text-xs text-neutral-500">{bid.proposal}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-neutral-900">${Number(bid.amount).toFixed(2)}</p>
-                  <p className="text-xs text-neutral-400">{bid.selected ? "Selected" : "Pending"}</p>
-                </div>
-              </motion.div>
-            ))}
+            {caseData.bids.map((bid, i) => {
+              const status = deriveBidStatus(bid.selected, caseData.status);
+              const amount = `$${Number(bid.amount).toFixed(2)}`;
+
+              return (
+                <BidRow
+                  key={bid.id}
+                  title={bid.vendor.email}
+                  subtitle={bid.proposal}
+                  amount={amount}
+                  status={status}
+                  index={i}
+                  action={
+                    viewerRole === "FARMER" && caseData.status === "OPEN" && !bid.selected ? (
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptBid(bid)}
+                        disabled={acceptingBidId === bid.id}
+                        className="rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {acceptingBidId === bid.id ? "Accepting..." : "Accept"}
+                      </button>
+                    ) : null
+                  }
+                />
+              );
+            })}
+            {escrowError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
+                {escrowError}
+              </div>
+            ) : null}
+            {escrowNotice ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                {escrowNotice}
+              </div>
+            ) : null}
           </div>
         </motion.div>
       )}
 
       <AnimatePresence>
-        {bidOpen && (
+        {bidOpen && viewerRole === "VENDOR" && (
           <BidModal caseId={id} onClose={() => setBidOpen(false)}
             onSuccess={() => { fetchCase(); }} />
         )}

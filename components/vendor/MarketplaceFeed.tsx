@@ -6,7 +6,7 @@ import { motion, useReducedMotion, AnimatePresence } from "motion/react";
 import type { CaseListItem } from "./types";
 import CaseCard from "./CaseCard";
 
-type Filter = "all" | "OPEN" | "IN_PROGRESS";
+type QuickFilter = "all" | "high" | "near";
 
 export default function MarketplaceFeed() {
   const reduceMotion = useReducedMotion();
@@ -14,7 +14,7 @@ export default function MarketplaceFeed() {
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [search, setSearch] = useState("");
 
   const fetchCases = useCallback(async () => {
@@ -33,12 +33,20 @@ export default function MarketplaceFeed() {
   useEffect(() => { fetchCases(); }, [fetchCases]);
 
   const filtered = cases.filter((c) => {
-    if (filter !== "all" && c.status !== filter) return false;
+    if (c.status !== "OPEN") return false;
     if (search) {
       const q = search.toLowerCase();
       const disease = c.diagnosis?.disease?.toLowerCase() ?? "";
       const email = c.farmer.email.toLowerCase();
       if (!disease.includes(q) && !email.includes(q)) return false;
+    }
+    if (quickFilter === "high") {
+      const urgency = String(c.diagnosis?.urgency ?? "").toLowerCase();
+      if (!urgency.includes("high")) return false;
+    }
+    if (quickFilter === "near") {
+      const location = (c.diagnosis as { location?: string } | null)?.location ?? "";
+      if (!location) return false;
     }
     return true;
   });
@@ -67,7 +75,7 @@ export default function MarketplaceFeed() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6">
+    <div className="mx-auto max-w-4xl px-6">
       <motion.div
         initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -77,17 +85,24 @@ export default function MarketplaceFeed() {
         <div className="relative border-b border-neutral-100 px-8 py-8">
           <div className="absolute right-0 top-0 h-40 w-40 -translate-y-8 translate-x-8 rounded-full bg-[#c7f1d2] opacity-40 blur-3xl" />
           <div className="relative">
-            <h1 className="font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">Open Cases</h1>
-            <p className="mt-1 text-sm text-neutral-500">Browse farmer cases and submit your treatment bids.</p>
+            <h1 className="font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">Marketplace</h1>
+            <p className="mt-1 text-sm text-neutral-500">Browse open cases and submit your treatment bids.</p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <input type="text" placeholder="Search by disease or farmer…" value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 rounded-2xl border border-neutral-200 bg-[#F5F0EB] py-3 px-4 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]" />
               <div className="flex gap-1 rounded-2xl border border-neutral-200 bg-[#F5F0EB] p-1">
-                {(["all", "OPEN", "IN_PROGRESS"] as const).map((tab) => (
-                  <button key={tab} onClick={() => setFilter(tab)}
-                    className={`rounded-xl px-4 py-1.5 text-xs font-medium transition ${filter === tab ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"}`}>
-                    {tab === "all" ? "All" : tab === "OPEN" ? "Open" : "In Progress"}
+                {(["all", "high", "near"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setQuickFilter(tab)}
+                    className={`rounded-xl px-4 py-1.5 text-xs font-medium transition ${
+                      quickFilter === tab
+                        ? "bg-white text-neutral-900 shadow-sm"
+                        : "text-neutral-500 hover:text-neutral-700"
+                    }`}
+                  >
+                    {tab === "all" ? "All" : tab === "high" ? "High Urgency" : "Near Me"}
                   </button>
                 ))}
               </div>

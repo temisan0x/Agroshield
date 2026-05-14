@@ -13,6 +13,21 @@ export default function CaseCard({ caseItem, index = 0, onClick }: CaseCardProps
   const reduceMotion = useReducedMotion();
   const disease = caseItem.diagnosis?.disease ?? "Undiagnosed";
   const confidence = caseItem.diagnosis?.confidence;
+  const urgencyRaw = String(caseItem.diagnosis?.urgency ?? "medium").toLowerCase();
+  const urgency = urgencyRaw.includes("high")
+    ? "HIGH"
+    : urgencyRaw.includes("low")
+      ? "LOW"
+      : "MEDIUM";
+  const urgencyTone =
+    urgency === "HIGH"
+      ? "bg-red-100 text-red-700"
+      : urgency === "LOW"
+        ? "bg-emerald-100 text-emerald-700"
+        : "bg-amber-100 text-amber-700";
+  const location =
+    (caseItem.diagnosis as { location?: string } | null)?.location ??
+    "Location unavailable";
   const date = new Date(caseItem.createdAt).toLocaleDateString("en-NG", {
     month: "short",
     day: "numeric",
@@ -50,10 +65,6 @@ export default function CaseCard({ caseItem, index = 0, onClick }: CaseCardProps
           {caseItem.status === "OPEN" ? "Open" : "In Progress"}
         </span>
 
-        {/* Bid count */}
-        <span className="absolute bottom-4 right-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-neutral-700 backdrop-blur-sm">
-          {caseItem._count.bids} bid{caseItem._count.bids !== 1 ? "s" : ""}
-        </span>
       </div>
 
       {/* Content */}
@@ -61,6 +72,13 @@ export default function CaseCard({ caseItem, index = 0, onClick }: CaseCardProps
         <h3 className="font-[family-name:var(--font-manrope)] text-base font-bold text-neutral-900">
           {disease}
         </h3>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${urgencyTone}`}>
+            {urgency}
+          </span>
+          <span className="text-xs text-neutral-400">{location}</span>
+        </div>
 
         {confidence != null && (
           <div className="mt-2 flex items-center gap-2">
@@ -77,8 +95,8 @@ export default function CaseCard({ caseItem, index = 0, onClick }: CaseCardProps
         )}
 
         <div className="mt-3 flex items-center justify-between text-xs text-neutral-400">
-          <span>{caseItem.farmer.email}</span>
           <span>{date}</span>
+          <span>{caseItem._count.bids} bid{caseItem._count.bids !== 1 ? "s" : ""}</span>
         </div>
       </div>
     </motion.div>
