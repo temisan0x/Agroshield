@@ -22,6 +22,8 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
   const [escrowError, setEscrowError] = useState<string | null>(null);
   const [escrowNotice, setEscrowNotice] = useState<string | null>(null);
+  const [userWalletAddress, setUserWalletAddress] = useState<string | null>(null);
+  const [walletChecking, setWalletChecking] = useState(true);
 
   const fetchCase = useCallback(async () => {
     try {
@@ -37,6 +39,31 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   }, [id]);
 
   useEffect(() => { fetchCase(); }, [fetchCase]);
+
+  // Fetch user profile to check wallet status
+  useEffect(() => {
+    async function checkWallet() {
+      try {
+        const token = localStorage.getItem("agroshield_token");
+        if (!token) {
+          setWalletChecking(false);
+          return;
+        }
+        const res = await fetch("/api/profile/summary", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUserWalletAddress(data?.profile?.user?.walletAddress ?? null);
+        }
+      } catch {
+        // Ignore errors - wallet address just won't show
+      } finally {
+        setWalletChecking(false);
+      }
+    }
+    checkWallet();
+  }, []);
 
   if (loading) {
     return (
@@ -159,6 +186,23 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
 
   return (
     <div>
+      {/* Warning banner if viewer wallet not connected */}
+      {!walletChecking && !userWalletAddress ? (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 text-amber-600">⚠️</div>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Wallet not connected</p>
+              <p className="mt-1 text-xs text-amber-700">
+                {viewerRole === "VENDOR"
+                  ? "Connect your Freighter wallet before accepting bids to enable escrow transactions."
+                  : "Your wallet is not connected. Connect your Freighter wallet to receive escrow payouts."}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <motion.div
         initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}

@@ -18,6 +18,7 @@ model User {
   passwordHash  String?
   role          String
   walletAddress String?
+  profileImage  String?
   createdAt     DateTime @default(now())
   cases         Case[]
   bids          Bid[]
