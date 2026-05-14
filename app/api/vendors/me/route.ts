@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET(request: NextRequest) {
   try {
     const user = await getUser(request);
+
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const user = await getUser(request);
+
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -38,29 +40,62 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { businessName, bio, specialization, experienceYears, location, phone } =
-      body ?? {};
+    const body = await request.json().catch(() => null);
 
-    // upsert — creates profile if first time, updates if exists
+    if (!body) {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 }
+      );
+    }
+
+    const {
+      businessName,
+      bio,
+      specialization,
+      experienceYears,
+      location,
+      phone,
+    } = body;
+
+    const parsedExperienceYears =
+      experienceYears !== undefined
+        ? Number(experienceYears)
+        : undefined;
+
+    if (
+      parsedExperienceYears !== undefined &&
+      Number.isNaN(parsedExperienceYears)
+    ) {
+      return NextResponse.json(
+        { error: "experienceYears must be a valid number" },
+        { status: 400 }
+      );
+    }
+
     const profile = await prisma.vendorProfile.upsert({
       where: { userId: user.id },
       update: {
         ...(businessName !== undefined && { businessName }),
         ...(bio !== undefined && { bio }),
         ...(specialization !== undefined && { specialization }),
-        ...(experienceYears !== undefined && { experienceYears: Number(experienceYears) }),
+        ...(parsedExperienceYears !== undefined && {
+          experienceYears: parsedExperienceYears,
+        }),
         ...(location !== undefined && { location }),
         ...(phone !== undefined && { phone }),
       },
       create: {
         userId: user.id,
-        businessName,
-        bio,
-        specialization,
-        experienceYears: experienceYears ? Number(experienceYears) : null,
-        location,
-        phone,
+        businessName: businessName ?? null,
+        bio: bio ?? null,
+        specialization: specialization ?? null,
+        experienceYears:
+          parsedExperienceYears !== undefined
+            ? parsedExperienceYears
+            : null,
+        location: location ?? null,
+        phone: phone ?? null,
       },
     });
 

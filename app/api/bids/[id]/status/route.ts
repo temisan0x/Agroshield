@@ -6,7 +6,7 @@ type BidAction = "ACCEPT" | "REJECT";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ bidId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser(request);
@@ -18,7 +18,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { bidId } = await params;
+    const { id } = await params;
     const body = await request.json();
     const { action } = body ?? {};
 
@@ -30,7 +30,7 @@ export async function PATCH(
     }
 
     const bid = await prisma.bid.findUnique({
-      where: { id: bidId },
+      where: { id },
       include: { case: true },
     });
 
@@ -54,12 +54,12 @@ export async function PATCH(
       // select this bid and close the case in a transaction
       const [updatedBid] = await prisma.$transaction([
         prisma.bid.update({
-          where: { id: bidId },
+          where: { id },
           data: { selected: true },
         }),
         // reject all other bids on the same case
         prisma.bid.updateMany({
-          where: { caseId: bid.caseId, id: { not: bidId } },
+          where: { caseId: bid.caseId, id: { not: id } },
           data: { selected: false },
         }),
         prisma.case.update({
@@ -73,7 +73,7 @@ export async function PATCH(
 
     // REJECT — just mark the bid, case stays OPEN
     const updatedBid = await prisma.bid.update({
-      where: { id: bidId },
+      where: { id },
       data: { selected: false },
     });
 
