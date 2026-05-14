@@ -1,5 +1,14 @@
 // ─── Shared Vendor Domain Types ───────────────────────────────────────────────
 
+/** Parsed diagnosis object from the API */
+export interface Diagnosis {
+  disease: string;
+  confidence: number;
+  description?: string;
+  treatment?: string;
+  [key: string]: unknown;
+}
+
 /** Shape returned by GET /api/vendors/me */
 export interface VendorProfileData {
   id: string;
@@ -12,6 +21,7 @@ export interface VendorProfileData {
   phone: string | null;
   createdAt: string;
   updatedAt: string;
+  walletAddress?: string | null;
 }
 
 /** Payload for PATCH /api/vendors/me */
@@ -22,14 +32,6 @@ export interface VendorProfilePayload {
   experienceYears?: number;
   location?: string;
   phone?: string;
-}
-
-/** Parsed diagnosis object from the API */
-export interface Diagnosis {
-  disease: string;
-  confidence: number;
-  description?: string;
-  [key: string]: unknown;
 }
 
 /** Shape returned by GET /api/cases (list item) */
@@ -52,7 +54,7 @@ export interface CaseDetailData {
   diagnosis: Diagnosis | null;
   status: string;
   createdAt: string;
-  farmer: { id: string; email: string };
+  farmer: { id: string; email: string; walletAddress: string | null };
   bids: BidOnCase[];
   escrow: EscrowData | null;
   dispute: DisputeData | null;

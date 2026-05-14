@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
       username: user.username,
       role: user.role,
       walletAddress: user.walletAddress,
+      profileImage: user.profileImage,
       createdAt: user.createdAt.toISOString(),
     };
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import type { VendorProfileData, VendorProfilePayload } from "./types";
 import StatCard from "./StatCard";
+import { requestAccess, getAddress } from "@stellar/freighter-api";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -147,6 +148,8 @@ export default function VendorProfile() {
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [connectingWallet, setConnectingWallet] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -190,6 +193,52 @@ export default function VendorProfile() {
       setSaving(false);
     }
   };
+
+  const handleConnectWallet = useCallback(async () => {
+    setConnectingWallet(true);
+    setWalletError(null);
+
+    const token = localStorage.getItem("agroshield_token");
+    if (!token) {
+      setWalletError("Please log in to connect your wallet.");
+      setConnectingWallet(false);
+      return;
+    }
+
+    try {
+      const access = await requestAccess();
+      if (access.error) {
+        throw new Error(access.error.message ?? "Failed to request access.");
+      }
+
+      const { address } = await getAddress();
+
+      if (!address) {
+        throw new Error("Failed to retrieve wallet address from Freighter.");
+      }
+
+      const response = await fetch("/api/profile/wallet", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ walletAddress: address }),
+      });
+
+      const data = (await response.json()) as { success?: boolean; walletAddress?: string; error?: string };
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Failed to save wallet address.");
+      }
+
+      setProfile((prev: VendorProfileData | null) => prev ? { ...prev, walletAddress: data.walletAddress ?? null } : null);
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message : "Failed to connect wallet.");
+    } finally {
+      setConnectingWallet(false);
+    }
+  }, []);
 
   // ── Loading state ──
   if (loading) {
@@ -313,32 +362,60 @@ export default function VendorProfile() {
             <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">
               Profile Details
             </p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <StatCard
-                label="Experience"
-                value={
-                  profile?.experienceYears
-                    ? `${profile.experienceYears} yrs`
-                    : "—"
-                }
-                delay={0.1}
-              />
-              <StatCard
-                label="Location"
-                value={profile?.location || "—"}
-                delay={0.15}
-              />
-              <StatCard
-                label="Specialization"
-                value={profile?.specialization || "—"}
-                delay={0.2}
-              />
-              <StatCard
-                label="Joined"
-                value={joined}
-                delay={0.25}
-              />
-            </div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+               <StatCard
+                 label="Experience"
+                 value={
+                   profile?.experienceYears
+                     ? `${profile.experienceYears} yrs`
+                     : "—"
+                 }
+                 delay={0.1}
+               />
+               <StatCard
+                 label="Location"
+                 value={profile?.location || "—"}
+                 delay={0.15}
+               />
+               <StatCard
+                 label="Specialization"
+                 value={profile?.specialization || "—"}
+                 delay={0.2}
+               />
+               <StatCard
+                 label="Joined"
+                 value={joined}
+                 delay={0.25}
+               />
+             </div>
+
+             {/* Wallet connection */}
+             <div className="mt-4">
+               {profile?.walletAddress ? (
+                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
+                     Wallet
+                   </div>
+                   <div className="mt-1 break-all font-[family-name:var(--font-manrope)] text-sm font-semibold text-neutral-900">
+                     {profile.walletAddress}
+                   </div>
+                 </div>
+               ) : (
+                 <button
+                   type="button"
+                   onClick={handleConnectWallet}
+                   disabled={connectingWallet}
+                   className="w-full rounded-2xl border border-neutral-200 bg-[#16a34a] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-70"
+                 >
+                   {connectingWallet ? "Connecting..." : "Connect Wallet"}
+                 </button>
+               )}
+               {walletError ? (
+                 <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
+                   {walletError}
+                 </div>
+               ) : null}
+             </div>
 
             {/* Completion indicator */}
             {profile && (
