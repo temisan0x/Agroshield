@@ -17,19 +17,29 @@ export async function GET(request: NextRequest) {
       include: {
         case: {
           include: {
-            farmer: { select: { email: true } },
+            farmer: {
+              select: { email: true },
+            },
             bids: {
               where: { selected: true },
               include: {
                 vendor: {
                   select: {
                     email: true,
-                    vendorProfile: true,
+                    vendorProfile: {
+                      select: {
+                        businessName: true,
+                      },
+                    },
                   },
                 },
               },
             },
-            escrow: true,
+            escrow: {
+              select: {
+                amount: true,
+              },
+            },
           },
         },
       },
