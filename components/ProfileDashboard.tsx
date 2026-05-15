@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { notifyAuthChange } from "@/lib/auth-client";
 import {
   connectFreighterWallet,
+  disconnectFreighterWallet,
   getExpectedWalletNetworkLabel,
 } from "@/lib/freighter-wallet";
 
@@ -432,6 +433,14 @@ export default function ProfileDashboard() {
     setWalletError(null);
 
     try {
+      const currentWalletAddress =
+        state.status === "ready" ? state.profile.user.walletAddress : null;
+      if (!currentWalletAddress) {
+        throw new Error("No connected wallet to disconnect.");
+      }
+
+      await disconnectFreighterWallet(currentWalletAddress);
+
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
         headers: {
@@ -450,28 +459,7 @@ export default function ProfileDashboard() {
         throw new Error(data.error ?? "Failed to disconnect wallet.");
       }
 
-      setState((current) => {
-        if (current.status !== "ready") return current;
-        return {
-          ...current,
-          profile: {
-            ...current.profile,
-            user: {
-              ...current.profile.user,
-              walletAddress: null,
-            },
-            settings: current.profile.settings.map((setting) =>
-              setting.label === "Wallet status"
-                ? {
-                    ...setting,
-                    value: "Not connected",
-                    helper: "Add a wallet to settle payouts faster",
-                  }
-                : setting,
-            ),
-          },
-        };
-      });
+      setState((current) => updateProfileWallet(current, null));
 
       if (isEditOpen) {
         setEditForm((current) => ({ ...current, walletAddress: "" }));
@@ -483,7 +471,7 @@ export default function ProfileDashboard() {
         error instanceof Error ? error.message : "Failed to disconnect wallet.",
       );
     }
-  }, [isEditOpen]);
+  }, [isEditOpen, state]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -1053,7 +1041,7 @@ export default function ProfileDashboard() {
                 ) : null}
                 <p className="text-xs text-neutral-400">
                   Freighter will ask you to confirm the active wallet on every
-                  connect.
+                  connect and disconnect.
                   {getExpectedWalletNetworkLabel() !== "any Stellar network"
                     ? ` Expected network: ${getExpectedWalletNetworkLabel()}.`
                     : ""}
