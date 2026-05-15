@@ -55,8 +55,15 @@ export function MarkTreatmentDoneButton({
   async function handleClick() {
     setLoading(true);
     setError(null);
+    const auth = getAuthContext();
+    if (!auth?.userId || !auth.token) {
+      setError("Authentication session lost. Please log in again.");
+      setLoading(false);
+      return;
+    }
 
     try {
+      let twRes;
       const caseRes = await fetch(`/api/cases/${caseId}`);
       const casePayload = (await caseRes.json()) as { case?: CaseDetailData; error?: string };
 
@@ -69,7 +76,7 @@ export function MarkTreatmentDoneButton({
         throw new Error("Escrow contractId missing.");
       }
 
-      const twRes = await fetch(
+      twRes = await fetch(
         `${TW_BASE_URL}/escrow/single-release/change-milestone-status`,
         {
           method: "POST",
@@ -109,6 +116,8 @@ export function MarkTreatmentDoneButton({
       if (!sendRes.ok) {
         throw new Error(sendPayload.error ?? sendPayload.message ?? "Failed to broadcast transaction.");
       }
+
+      if (!auth.token) throw new Error("Authentication token lost.");
 
       const markRes = await fetch("/api/mark-treatment-done", {
         method: "POST",

@@ -113,7 +113,7 @@ export async function connectFreighterWallet() {
     }
     return {
       address: access.address,
-      network: network.network,
+      network: network.network as FreighterNetworkName,
       networkPassphrase: network.networkPassphrase,
     } satisfies ConnectWalletResult;
   }

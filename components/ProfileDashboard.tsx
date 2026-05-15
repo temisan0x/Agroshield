@@ -389,6 +389,7 @@ export default function ProfileDashboard() {
 
     try {
       const access = await connectFreighterWallet();
+      const address = typeof access === "string" ? access : access.address;
 
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
@@ -396,7 +397,7 @@ export default function ProfileDashboard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ walletAddress: access.address }),
+        body: JSON.stringify({ walletAddress: address }),
       });
 
       const data = (await response.json()) as {
@@ -409,7 +410,7 @@ export default function ProfileDashboard() {
         throw new Error(data.error ?? "Failed to save wallet address.");
       }
 
-      const savedWalletAddress = data.walletAddress ?? access.address;
+      const savedWalletAddress = data.walletAddress ?? address;
       setState((current) => updateProfileWallet(current, savedWalletAddress));
       setEditForm((current) => ({
         ...current,
