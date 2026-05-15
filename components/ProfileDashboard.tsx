@@ -94,8 +94,8 @@ function formatUsernameDisplay(username: string | null, email: string) {
 
 function truncateAddress(address: string | null) {
   if (!address) return "Not connected";
-  if (address.length <= 10) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  if (address.length <= 8) return address;
+  return `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
 
 function fileToDataUrl(file: File) {
@@ -792,7 +792,13 @@ export default function ProfileDashboard() {
                 </div>
 
                 <div className="space-y-3">
-                  {profile.settings.map((setting) => (
+                  {profile.settings.map((setting) => {
+                    const helperText =
+                      setting.label === "Wallet status" && profile.user.walletAddress
+                        ? truncateAddress(profile.user.walletAddress)
+                        : setting.helper;
+
+                    return (
                     <div
                       key={setting.label}
                       className="rounded-2xl border border-neutral-100 bg-[#f9f4ee] p-4"
@@ -804,10 +810,11 @@ export default function ProfileDashboard() {
                         {setting.value}
                       </div>
                       <div className="mt-2 text-sm text-neutral-500">
-                        {setting.helper}
+                        {helperText}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
 <div className="flex flex-wrap gap-3 pt-2">
