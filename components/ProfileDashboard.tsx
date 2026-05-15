@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notifyAuthChange } from "@/lib/auth-client";
-import { requestAccess, getAddress, setAllowed } from "@stellar/freighter-api";
+import {
+  connectFreighterWallet,
+  getExpectedWalletNetworkLabel,
+} from "@/lib/freighter-wallet";
 
 type ProfileItem = {
   id: string;
@@ -201,6 +204,9 @@ export default function ProfileDashboard() {
   const [connectingWallet, setConnectingWallet] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const profileMenuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -258,10 +264,18 @@ export default function ProfileDashboard() {
   }, [retryKey]);
 
   const handleLogout = () => {
+    setIsProfileMenuOpen(false);
     localStorage.removeItem("agroshield_token");
     notifyAuthChange();
     router.replace("/login");
     router.refresh();
+  };
+
+  const handleOpenSettings = () => {
+    setIsProfileMenuOpen(false);
+    const settingsSection = document.getElementById("settings");
+    settingsSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+    settingsSection?.focus();
   };
 
   const handleEditProfile = () => {
@@ -369,38 +383,7 @@ export default function ProfileDashboard() {
     }
 
     try {
-      const allowResult = await withTimeout(setAllowed(), 15000);
-      if (allowResult.error) {
-        throw new Error(
-          allowResult.error.message ?? "Failed to authorize Freighter access.",
-        );
-      }
-
-      if (!allowResult.isAllowed) {
-        throw new Error("Freighter access was not approved.");
-      }
-
-      const access = await withTimeout(requestAccess(), 15000);
-      if (access.error) {
-        throw new Error(access.error.message ?? "Failed to request access.");
-      }
-
-      let walletAddress = access.address?.trim() ?? "";
-      if (!walletAddress) {
-        const addressResult = await withTimeout(getAddress(), 15000);
-        if (addressResult.error) {
-          throw new Error(
-            addressResult.error.message ??
-              "Failed to retrieve wallet address from Freighter.",
-          );
-        }
-
-        walletAddress = addressResult.address.trim();
-      }
-
-      if (!walletAddress) {
-        throw new Error("Failed to retrieve wallet address from Freighter.");
-      }
+      const access = await withTimeout(connectFreighterWallet(), 45000);
 
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
@@ -408,7 +391,7 @@ export default function ProfileDashboard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ walletAddress }),
+        body: JSON.stringify({ walletAddress: access.address }),
       });
 
       const data = (await response.json()) as {
@@ -421,7 +404,7 @@ export default function ProfileDashboard() {
         throw new Error(data.error ?? "Failed to save wallet address.");
       }
 
-      const savedWalletAddress = data.walletAddress ?? walletAddress;
+      const savedWalletAddress = data.walletAddress ?? access.address;
       setState((current) => updateProfileWallet(current, savedWalletAddress));
       setEditForm((current) => ({
         ...current,
@@ -495,6 +478,35 @@ export default function ProfileDashboard() {
       );
     }
   }, [isEditOpen]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!isProfileMenuOpen) return;
+      const menu = profileMenuRef.current;
+      const button = profileMenuButtonRef.current;
+      const target = event.target as Node;
+
+      if (menu?.contains(target) || button?.contains(target)) {
+        return;
+      }
+
+      setIsProfileMenuOpen(false);
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsProfileMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isProfileMenuOpen]);
 
   if (state.status === "loading") {
     return (
@@ -620,18 +632,62 @@ export default function ProfileDashboard() {
 
             <div className="relative z-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
               <div className="flex flex-wrap items-start gap-5">
-                {profile.user.profileImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={profile.user.profileImage}
-                    alt="Profile"
-                    className="h-20 w-20 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-neutral-900 text-xl font-semibold text-white">
-                    {avatarLetter}
-                  </div>
-                )}
+                <div className="relative">
+                  <button
+                    ref={profileMenuButtonRef}
+                    type="button"
+                    onClick={() => setIsProfileMenuOpen((current) => !current)}
+                    aria-haspopup="menu"
+                    aria-expanded={isProfileMenuOpen}
+                    aria-label="Open profile menu"
+                    className="group flex h-20 w-20 items-center justify-center overflow-hidden rounded-full ring-1 ring-transparent transition hover:ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                  >
+                    {profile.user.profileImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={profile.user.profileImage}
+                        alt="Profile"
+                        className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center rounded-full bg-neutral-900 text-xl font-semibold text-white transition duration-200 group-hover:scale-105">
+                        {avatarLetter}
+                      </div>
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {isProfileMenuOpen ? (
+                      <motion.div
+                        ref={profileMenuRef}
+                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                        transition={{ duration: 0.16 }}
+                        className="absolute left-0 top-[calc(100%+0.75rem)] z-20 w-56 overflow-hidden rounded-3xl border border-neutral-200 bg-white p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.35)]"
+                        role="menu"
+                        aria-label="Profile menu"
+                      >
+                        <button
+                          type="button"
+                          onClick={handleOpenSettings}
+                          className="flex w-full items-center rounded-2xl px-4 py-3 text-left text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 hover:text-neutral-900"
+                          role="menuitem"
+                        >
+                          Settings
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className="flex w-full items-center rounded-2xl px-4 py-3 text-left text-sm font-medium text-red-600 transition hover:bg-red-50"
+                          role="menuitem"
+                        >
+                          Sign out
+                        </button>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
                 <div className="min-w-0 max-w-2xl">
                   <div
                     className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${roleTone}`}
@@ -667,13 +723,6 @@ export default function ProfileDashboard() {
                     >
                       Open marketplace
                     </Link>
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="rounded-full border border-neutral-200 px-5 py-2.5 text-sm font-medium text-neutral-700 cursor-pointer"
-                    >
-                      Sign out
-                    </button>
                   </div>
                 </div>
               </div>
@@ -996,6 +1045,13 @@ export default function ProfileDashboard() {
                     {walletError}
                   </div>
                 ) : null}
+                <p className="text-xs text-neutral-400">
+                  Freighter will ask you to confirm the active wallet on every
+                  connect.
+                  {getExpectedWalletNetworkLabel() !== "any Stellar network"
+                    ? ` Expected network: ${getExpectedWalletNetworkLabel()}.`
+                    : ""}
+                </p>
               </section>
             </aside>
           </div>
