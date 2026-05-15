@@ -69,7 +69,6 @@ export default function Nav() {
             <span className="font-semibold tracking-wide">AgroShield</span>
           </Link>
 
-          {/* Replace the static nav links with role-aware ones */}
           <div className="hidden items-center gap-6 text-sm text-neutral-300 md:flex">
             <Link href="/#how" className="transition hover:text-white">
               How it works
@@ -113,24 +112,20 @@ export default function Nav() {
             )}
           </div>
 
-          {hydrated && !isAuthed && (
+          {hydrated && isAuthed ? (
+            <Link href={profileRoute}>{fallbackAvatar}</Link>
+          ) : hydrated && !isAuthed ? (
             <Link
               href="/signup"
-              className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-neutral-900 cursor-pointer"
+              className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-neutral-900"
             >
               Get started
             </Link>
-          )}
-
-          {hydrated && isAuthed && (
-            <Link href={profileRoute} className="cursor-pointer">
-              {fallbackAvatar}
-            </Link>
+          ) : (
+            <div className="h-9 w-9" />
           )}
         </div>
       </div>
     </nav>
   );
 }
-
-export default memo(Nav);
