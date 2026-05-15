@@ -19,11 +19,34 @@ const fallbackAvatar = (
   </svg>
 );
 
+type UserRole = "FARMER" | "VENDOR" | null;
+
 function Nav() {
   const isAuthed = useAuthStatus();
   const hydrated = useHydrated();
   const pathname = usePathname();
+  const [role, setRole] = useState<UserRole>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    try {
+      const token = localStorage.getItem("agroshield_token");
+
+      if (!token) {
+        setRole(null);
+        return;
+      }
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      setRole(payload?.role ?? null);
+    } catch (error) {
+      console.error("[NAV_AUTH_PARSE]", error);
+      localStorage.removeItem("agroshield_token");
+      setRole(null);
+    }
+  }, [hydrated]);
 
   useEffect(() => {
     let active = true;
@@ -49,9 +72,7 @@ function Nav() {
         };
 
         if (active) {
-          setProfileImage(
-            response.ok ? data.profile?.user?.profileImage ?? null : null
-          );
+          setProfileImage(response.ok ? data.profile?.user?.profileImage ?? null : null);
         }
       } catch {
         if (active) setProfileImage(null);
@@ -65,6 +86,8 @@ function Nav() {
     };
   }, [hydrated, isAuthed]);
 
+  const profileRoute = role === "VENDOR" ? "/vendor/profile" : "/farmer/profile";
+
   return (
     <nav className="fixed top-6 left-0 right-0 z-50">
       <div className="mx-auto w-full max-w-4xl px-6">
@@ -76,6 +99,7 @@ function Nav() {
             <span className="h-3 w-3 rounded-sm bg-[#16a34a]" />
             <span className="font-semibold tracking-wide">AgroShield</span>
           </Link>
+
           <div className="hidden items-center gap-6 text-sm text-neutral-300 md:flex">
             <Link className="transition hover:text-white" href="/#how">
               How it works
@@ -98,48 +122,79 @@ function Nav() {
             >
               Diagnose
             </Link>
+
+            {hydrated && isAuthed && role === "VENDOR" ? (
+              <>
+                <Link
+                  href="/vendor/cases"
+                  className={`transition hover:text-white ${pathname === "/vendor/cases" ? "text-white" : ""}`}
+                >
+                  Browse Cases
+                </Link>
+                <Link
+                  href="/vendor/bids"
+                  className={`transition hover:text-white ${pathname === "/vendor/bids" ? "text-white" : ""}`}
+                >
+                  My Bids
+                </Link>
+              </>
+            ) : null}
+
+            {hydrated && isAuthed && role === "FARMER" ? (
+              <Link
+                href="/farmer/cases"
+                className={`transition hover:text-white ${pathname === "/farmer/cases" ? "text-white" : ""}`}
+              >
+                My Cases
+              </Link>
+            ) : null}
+
             {hydrated && isAuthed ? (
               <Link
-                className={`transition hover:text-white ${pathname === "/profile" ? "text-white" : ""}`}
-                href="/profile"
+                className={`transition hover:text-white ${pathname === profileRoute ? "text-white" : ""}`}
+                href={profileRoute}
               >
                 Profile
               </Link>
             ) : null}
+
             {hydrated && !isAuthed ? (
               <Link className="transition hover:text-white" href="/login">
                 Log in
               </Link>
             ) : null}
           </div>
-          {hydrated && !isAuthed ? (
-            <Link className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-neutral-900" href="/signup">
+
+          {hydrated && isAuthed ? (
+            <Link
+              href={profileRoute}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/15"
+              aria-label="Open profile"
+              title="Open profile"
+            >
+              {profileImage ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={profileImage}
+                    alt="Profile"
+                    className="h-9 w-9 rounded-full object-cover"
+                  />
+                </>
+              ) : (
+                fallbackAvatar
+              )}
+            </Link>
+          ) : hydrated && !isAuthed ? (
+            <Link
+              href="/signup"
+              className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-neutral-900"
+            >
               Get started
             </Link>
-          ) : null}
-          {hydrated && isAuthed ? (
-            <div className="flex items-center gap-3 text-sm text-neutral-100">
-              <Link
-                href="/profile"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/15"
-                aria-label="Open profile"
-                title="Open profile"
-              >
-                {profileImage ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={profileImage}
-                      alt="Profile"
-                      className="h-9 w-9 rounded-full object-cover"
-                    />
-                  </>
-                ) : (
-                  fallbackAvatar
-                )}
-              </Link>
-            </div>
-          ) : null}
+          ) : (
+            <div className="h-9 w-9" />
+          )}
         </div>
       </div>
     </nav>
