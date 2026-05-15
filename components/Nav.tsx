@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { memo, useEffect, useRef, useState } from "react";
-import { notifyAuthChange, useAuthStatus, useHydrated } from "@/lib/auth-client";
+import { decodeJwtPayload, getStoredAuthToken, notifyAuthChange, useAuthStatus, useHydrated } from "@/lib/auth-client";
 
 const fallbackAvatar = (
   <svg viewBox="0 0 40 40" aria-hidden="true" className="h-9 w-9 text-neutral-400">
@@ -35,16 +35,16 @@ function Nav() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      const token = localStorage.getItem("agroshield_token");
+      const token = getStoredAuthToken();
       if (!token) {
         queueMicrotask(() => {
           setRole(null);
         });
         return;
       }
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
       queueMicrotask(() => {
-        setRole(payload?.role ?? null);
+        setRole((payload?.role as UserRole) ?? null);
       });
     } catch (error) {
       console.error("[NAV_AUTH_PARSE]", error);
@@ -64,7 +64,7 @@ function Nav() {
         return;
       }
 
-      const token = localStorage.getItem("agroshield_token");
+      const token = getStoredAuthToken();
       if (!token) {
         if (active) setProfileImage(null);
         return;

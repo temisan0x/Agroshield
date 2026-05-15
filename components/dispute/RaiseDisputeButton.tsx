@@ -52,7 +52,7 @@ export default function RaiseDisputeButton({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ caseId, reason }),
+        body: JSON.stringify({ caseId, reason, contractId: escrowContractId }),
       });
 
       if (!raiseRes.ok) {
@@ -144,7 +144,7 @@ export default function RaiseDisputeButton({
                         Dispute raised
                       </p>
                       <p className="text-sm text-neutral-500 font-[family-name:var(--font-inter)]">
-                        We'll review within 48 hours.
+                        We&apos;ll review within 48 hours.
                       </p>
                     </motion.div>
                   ) : (
@@ -172,8 +172,9 @@ export default function RaiseDisputeButton({
                         </div>
 
                         <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-4 text-sm text-yellow-800 font-[family-name:var(--font-inter)]">
-                          ⚠ Raising a dispute will freeze the escrow. Funds will not move until
-                          our team resolves it.
+                        {"⚠ Raising a dispute will freeze the escrow. Funds will not move until"}
+                        {" "}
+                        our team resolves it.
                         </div>
 
                         {error && (

@@ -31,18 +31,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing wallet address" }, { status: 400 });
     }
 
-    let response: { unsignedTransaction?: string } | null = null;
-    if (contractId) {
-      try {
-        response = await disputeEscrow({
-          contractId,
-          disputeStartedBy: walletAddress,
-        });
-      } catch (error) {
-        console.error("[DISPUTE_CREATE_TW]", error);
-        response = { unsignedTransaction: "DEMO_XDR_UNSIGNED" };
-      }
+    if (!contractId) {
+      return NextResponse.json({ error: "contractId is required" }, { status: 400 });
     }
+
+    const response = await disputeEscrow({
+      contractId,
+      signer: walletAddress,
+    });
 
     const dispute = await prisma.dispute.create({
       data: {

@@ -9,13 +9,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "signedXdr is required" }, { status: 400 });
     }
 
+    if (!process.env.TRUSTLESS_WORK_API_KEY) {
+      return NextResponse.json(
+        { error: "TRUSTLESS_WORK_API_KEY is missing on the server" },
+        { status: 500 }
+      );
+    }
+
     console.log(`[TW_PROXY_TX] Broadcasting to TESTNET: ${TW_ENDPOINT}`);
 
     const response = await fetch(TW_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.TRUSTLESS_WORK_API_KEY || "",
+        "x-api-key": process.env.TRUSTLESS_WORK_API_KEY,
       },
       body: JSON.stringify({ signedXdr }),
     });

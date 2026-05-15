@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
@@ -174,12 +175,12 @@ export default function MarketplacePage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {user?.role === "FARMER" ? (
-                  <a
+                  <Link
                     href="/farmer/cases"
                     className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
                   >
                     My Cases →
-                  </a>
+                  </Link>
                 ) : (
                   <>
                     <a
