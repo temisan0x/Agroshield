@@ -31,6 +31,17 @@ function getAuthContext() {
   }
 }
 
+function normalizeSignedXdr(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object") {
+    const signed = (result as Record<string, unknown>).signedXdr ??
+      (result as Record<string, unknown>).signedTransaction ??
+      (result as Record<string, unknown>).signedTxXdr;
+    if (typeof signed === "string") return signed;
+  }
+  throw new Error("Failed to sign transaction with Freighter.");
+}
+
 export function ConfirmDeliveryButton({
   caseId,
   contractId,
@@ -55,39 +66,39 @@ export function ConfirmDeliveryButton({
     try {
       const { signTransaction } = await import("@stellar/freighter-api");
 
-      const approveRes = await fetch(`${TW_BASE_URL}/escrow/single-release/approve-milestone`, {
+      const response = await fetch("/api/confirm-delivery", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contractId,
-          milestoneIndex: 0,
-          signer: auth.userId,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${auth.token}`,
+        },
+        body: JSON.stringify({ caseId, contractId }),
       });
 
-      const approvePayload = (await approveRes.json().catch(() => ({}))) as {
-        unsignedTransaction?: string;
+      const payload = (await response.json().catch(() => ({}))) as {
+        approveXdr?: string;
+        releaseXdr?: string;
         error?: string;
-        message?: string;
       };
 
-      if (!approveRes.ok || !approvePayload.unsignedTransaction) {
-        throw new Error(approvePayload.error ?? approvePayload.message ?? "Failed to approve milestone.");
+      if (!response.ok || !payload.approveXdr || !payload.releaseXdr) {
+        throw new Error(payload.error ?? "Failed to prepare delivery confirmation.");
       }
 
-      const approveSigned = await signTransaction(approvePayload.unsignedTransaction);
+      const approveSigned = await signTransaction(payload.approveXdr);
+      const approveXdr = normalizeSignedXdr(approveSigned);
+
       const approveSendRes = await fetch(`${TW_BASE_URL}/helper/send-transaction`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ xdr: approveSigned }),
+        body: JSON.stringify({ signedXdr: approveXdr }),
       });
 
-      const approveSendPayload = (await approveSendRes.json().catch(() => ({}))) as {
-        error?: string;
-        message?: string;
-      };
-
       if (!approveSendRes.ok) {
+        const approveSendPayload = (await approveSendRes.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+        };
         throw new Error(
           approveSendPayload.error ??
             approveSendPayload.message ??
@@ -95,38 +106,20 @@ export function ConfirmDeliveryButton({
         );
       }
 
-      const releaseRes = await fetch(`${TW_BASE_URL}/escrow/single-release/release-funds`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contractId,
-          milestoneIndex: 0,
-        }),
-      });
+      const releaseSigned = await signTransaction(payload.releaseXdr);
+      const releaseXdr = normalizeSignedXdr(releaseSigned);
 
-      const releasePayload = (await releaseRes.json().catch(() => ({}))) as {
-        unsignedTransaction?: string;
-        error?: string;
-        message?: string;
-      };
-
-      if (!releaseRes.ok || !releasePayload.unsignedTransaction) {
-        throw new Error(releasePayload.error ?? releasePayload.message ?? "Failed to prepare fund release.");
-      }
-
-      const releaseSigned = await signTransaction(releasePayload.unsignedTransaction);
       const releaseSendRes = await fetch(`${TW_BASE_URL}/helper/send-transaction`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ xdr: releaseSigned }),
+        body: JSON.stringify({ signedXdr: releaseXdr }),
       });
 
-      const releaseSendPayload = (await releaseSendRes.json().catch(() => ({}))) as {
-        error?: string;
-        message?: string;
-      };
-
       if (!releaseSendRes.ok) {
+        const releaseSendPayload = (await releaseSendRes.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+        };
         throw new Error(
           releaseSendPayload.error ??
             releaseSendPayload.message ??
@@ -140,7 +133,7 @@ export function ConfirmDeliveryButton({
           "Content-Type": "application/json",
           Authorization: `Bearer ${auth.token}`,
         },
-        body: JSON.stringify({ caseId, contractId }),
+        body: JSON.stringify({ caseId, contractId, confirmed: true }),
       });
 
       const confirmPayload = (await confirmRes.json().catch(() => ({}))) as {
