@@ -22,7 +22,7 @@ model User {
   createdAt     DateTime @default(now())
   cases         Case[]
   bids          Bid[]
-  vendorProfile  VendorProfile?
+  vendorProfile VendorProfile? @relation("VendorToUser")
 }
 
 model Case {
@@ -84,7 +84,7 @@ model Dispute {
 model VendorProfile {
   id               String   @id @default(cuid())
   userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id])
+  user             User     @relation("VendorToUser", fields: [userId], references: [id])
   businessName     String?
   bio              String?
   specialization   String?

@@ -24,22 +24,13 @@ export async function GET(request: NextRequest) {
               where: { selected: true },
               include: {
                 vendor: {
-                  select: {
-                    email: true,
-                    vendorProfile: {
-                      select: {
-                        businessName: true,
-                      },
-                    },
+                  include: {
+                    vendorProfile: true,
                   },
                 },
               },
             },
-            escrow: {
-              select: {
-                amount: true,
-              },
-            },
+            escrow: true,
           },
         },
       },
