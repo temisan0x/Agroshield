@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import type { VendorProfileData, VendorProfilePayload } from "@/app/vendor/profile/types";
+import { connectFreighterWallet } from "@/lib/freighter-wallet";
 import StatCard from "./StatCard";
 
 type ProfileFieldValue = VendorProfilePayload[keyof VendorProfilePayload];
@@ -240,7 +241,8 @@ export default function VendorProfile() {
         throw new Error(access.error.message ?? "Failed to request access.");
       }
 
-      const address = access.address ?? (await getAddress()).address;
+      const helperAddress = await connectFreighterWallet().catch(() => null);
+      const address = access.address ?? (await getAddress()).address ?? helperAddress;
       if (!address) {
         throw new Error("Failed to retrieve wallet address from Freighter.");
       }
@@ -396,16 +398,30 @@ export default function VendorProfile() {
                   <div className="mt-1 break-all font-[family-name:var(--font-manrope)] text-sm font-semibold text-neutral-900">
                     {profile.walletAddress}
                   </div>
+                  <p className="mt-2 text-xs text-neutral-500">
+                    Network label hint: connect the same Freighter account you use on Trustless Work testnet.
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-400">
+                    Re-confirm this wallet before accepting escrow actions if you switch browser accounts.
+                  </p>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleConnectWallet}
-                  disabled={connectingWallet}
-                  className="w-full rounded-2xl border border-neutral-200 bg-[#16a34a] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {connectingWallet ? "Connecting..." : "Connect Wallet"}
-                </button>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleConnectWallet}
+                    disabled={connectingWallet}
+                    className="w-full rounded-2xl border border-neutral-200 bg-[#16a34a] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {connectingWallet ? "Connecting..." : "Connect Wallet"}
+                  </button>
+                  <p className="text-xs text-neutral-500">
+                    Network label hint: use your Freighter testnet wallet for AgroShield escrow actions.
+                  </p>
+                  <p className="text-xs text-neutral-400">
+                    Wallet re-confirm note: if the popup shows a different account than expected, cancel and reconnect.
+                  </p>
+                </div>
               )}
               {walletError ? (
                 <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">

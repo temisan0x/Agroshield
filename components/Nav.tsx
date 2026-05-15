@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { memo, useEffect, useState } from "react";
-import { useAuthStatus, useHydrated } from "@/lib/auth-client";
+import { usePathname, useRouter } from "next/navigation";
+import { memo, useEffect, useRef, useState } from "react";
+import { notifyAuthChange, useAuthStatus, useHydrated } from "@/lib/auth-client";
 
 const fallbackAvatar = (
   <svg viewBox="0 0 40 40" aria-hidden="true" className="h-9 w-9 text-neutral-400">
@@ -22,11 +22,14 @@ const fallbackAvatar = (
 type UserRole = "FARMER" | "VENDOR" | null;
 
 function Nav() {
+  const router = useRouter();
   const isAuthed = useAuthStatus();
   const hydrated = useHydrated();
   const pathname = usePathname();
   const [role, setRole] = useState<UserRole>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -35,16 +38,22 @@ function Nav() {
       const token = localStorage.getItem("agroshield_token");
 
       if (!token) {
-        setRole(null);
+        queueMicrotask(() => {
+          setRole(null);
+        });
         return;
       }
 
       const payload = JSON.parse(atob(token.split(".")[1]));
-      setRole(payload?.role ?? null);
+      queueMicrotask(() => {
+        setRole(payload?.role ?? null);
+      });
     } catch (error) {
       console.error("[NAV_AUTH_PARSE]", error);
       localStorage.removeItem("agroshield_token");
-      setRole(null);
+      queueMicrotask(() => {
+        setRole(null);
+      });
     }
   }, [hydrated]);
 
@@ -87,6 +96,40 @@ function Nav() {
   }, [hydrated, isAuthed]);
 
   const profileRoute = role === "VENDOR" ? "/vendor/profile" : "/farmer/profile";
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [menuOpen]);
+
+  function handleSignOut() {
+    localStorage.removeItem("agroshield_token");
+    notifyAuthChange();
+    setMenuOpen(false);
+    setRole(null);
+    setProfileImage(null);
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <nav className="fixed top-6 left-0 right-0 z-50">
@@ -166,25 +209,67 @@ function Nav() {
           </div>
 
           {hydrated && isAuthed ? (
-            <Link
-              href={profileRoute}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/15"
-              aria-label="Open profile"
-              title="Open profile"
-            >
-              {profileImage ? (
-                <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={profileImage}
-                    alt="Profile"
-                    className="h-9 w-9 rounded-full object-cover"
-                  />
-                </>
-              ) : (
-                fallbackAvatar
-              )}
-            </Link>
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((value) => !value)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/15"
+                aria-label="Open profile menu"
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                title="Open profile menu"
+              >
+                {profileImage ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={profileImage}
+                      alt="Profile"
+                      className="h-9 w-9 rounded-full object-cover"
+                    />
+                  </>
+                ) : (
+                  fallbackAvatar
+                )}
+              </button>
+
+              {menuOpen ? (
+                <div className="absolute right-0 top-12 w-52 overflow-hidden rounded-2xl border border-neutral-200 bg-white py-2 text-sm text-neutral-700 shadow-xl">
+                  <Link
+                    href={profileRoute}
+                    className="block px-4 py-2 transition hover:bg-neutral-50"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    View profile
+                  </Link>
+                  {role === "VENDOR" ? (
+                    <Link
+                      href="/vendor/bids"
+                      className="block px-4 py-2 transition hover:bg-neutral-50"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      My bids
+                    </Link>
+                  ) : null}
+                  {role === "FARMER" ? (
+                    <Link
+                      href="/farmer/cases"
+                      className="block px-4 py-2 transition hover:bg-neutral-50"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      My cases
+                    </Link>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="block w-full px-4 py-2 text-left text-red-600 transition hover:bg-red-50"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
+            </div>
           ) : hydrated && !isAuthed ? (
             <Link
               href="/signup"
@@ -200,3 +285,5 @@ function Nav() {
     </nav>
   );
 }
+
+export default memo(Nav);
