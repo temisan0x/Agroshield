@@ -52,8 +52,8 @@ export default function CaseCard({ caseItem, index = 0, onClick, action }: CaseC
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: index * 0.04, ease: "easeOut" }}
       onClick={onClick}
-      className={`group relative h-full overflow-hidden transition-all duration-200 ${
-        onClick ? "cursor-pointer" : ""
+      className={`group relative h-full overflow-hidden rounded-[32px] bg-white/50 border border-neutral-100/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:-translate-y-1 ${
+        onClick ? "cursor-pointer active:scale-[0.98]" : ""
       }`}
     >
       {/* Image */}

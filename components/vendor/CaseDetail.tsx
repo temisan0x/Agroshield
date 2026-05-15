@@ -91,7 +91,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
             </div>
           </div>
           <div className="space-y-4">
-            <div className="rounded-2xl border border-neutral-100 bg-white p-6 shadow-sm">
+            <div className="p-6">
               <div className="flex gap-2">
                 <div className="h-6 w-16 rounded-full bg-neutral-100" />
                 <div className="h-6 w-16 rounded-full bg-neutral-100" />
@@ -114,7 +114,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   if (error || !caseData || caseStatus === null) {
     return (
       <div className="mx-auto max-w-md py-32 text-center">
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-8">
+        <div className="rounded-2xl border border-red-200 p-6 py-8">
           <p className="text-sm font-semibold text-red-700">Error</p>
           <p className="mt-1 text-xs text-red-500">{error ?? "Case not found"}</p>
           <button
@@ -461,7 +461,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
             )}
 
             {description ? (
-              <div className="mt-4 rounded-xl border border-green-100 bg-green-50 p-4">
+              <div className="mt-4 rounded-xl border border-green-100 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.15em] text-green-700">
                   Recommended treatment
                 </p>
@@ -480,7 +480,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
 
         {/* ─── Sidebar ─────────────────────────────────────────────────── */}
         <div className="lg:sticky lg:top-6">
-          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[32px] bg-white/40 border border-white/20 p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-md">
             <div className="flex flex-wrap gap-2">
               <span
                 className={`rounded-full border px-3 py-1 text-xs font-medium ${
@@ -516,7 +516,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
               <button
                 type="button"
                 onClick={() => setBidOpen(true)}
-                className="mt-5 w-full rounded-xl bg-neutral-900 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-neutral-800"
+                className="mt-6 w-full rounded-full bg-neutral-900 py-4 text-sm font-semibold text-white transition-all hover:bg-neutral-800 hover:shadow-lg active:scale-[0.98]"
               >
                 Submit a Bid
               </button>
@@ -538,13 +538,13 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
 
             <div className="my-5 border-t border-neutral-100" />
 
-            <div className="flex flex-col gap-3 text-xs text-neutral-400">
-              <div className="flex items-center justify-between">
-                <span>CURRENT BIDS</span>
-                <span className="text-sm font-bold text-neutral-900">{caseData.bids.length}</span>
+            <div className="flex flex-col gap-4 text-xs font-medium uppercase tracking-wider text-neutral-400">
+              <div className="flex items-center justify-between border-b border-neutral-100/50 pb-3">
+                <span>Current Bids</span>
+                <span className="text-base font-bold text-neutral-900">{caseData.bids.length}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>POSTED</span>
+                <span>Posted On</span>
                 <span className="text-sm font-bold text-neutral-900">{date}</span>
               </div>
             </div>
@@ -621,7 +621,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
               const amount = `$${Number(bid.amount).toFixed(2)}`;
 
               return (
-                <div key={bid.id} className="rounded-2xl border border-neutral-100 bg-white p-5 shadow-sm">
+                <div key={bid.id} className="rounded-2xl border border-neutral-200/60 p-5 shadow-sm transition hover:bg-white/30">
                   <BidRow
                     title={bid.vendor.email}
                     subtitle={bid.proposal}
@@ -656,7 +656,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
             ) : null}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 p-10 text-center">
+          <div className="rounded-2xl border border-dashed border-neutral-200 p-10 text-center">
             <div className="text-3xl">🤝</div>
             <p className="mt-3 text-sm font-semibold text-neutral-900">No bids yet</p>
             <p className="mt-1 text-xs text-neutral-500">Be the first to submit a proposal</p>
@@ -675,7 +675,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
 
 function MetaCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-neutral-50 p-4">
+    <div className="rounded-xl border border-neutral-200/50 p-4">
       <p className="text-xs font-medium uppercase tracking-[0.15em] text-neutral-400">{label}</p>
       <p className="mt-1 text-sm font-semibold text-neutral-800">{value}</p>
     </div>
