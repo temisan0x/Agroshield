@@ -11,6 +11,7 @@ import { signTransaction, connectWallet } from "@/lib/walletKit";
 import { sendSignedTransaction } from "@/lib/trustlesswork";
 import RaiseDisputeButton from "../dispute/RaiseDisputeButton";
 import { MarkTreatmentDoneButton } from "./MarkTreatmentDoneButton";
+import { decodeJwtPayload, getStoredAuthToken } from "@/lib/auth-client";
 
 interface CaseDetailProps {
   id: string;
@@ -71,18 +72,24 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
     checkWallet();
 
     async function checkRole() {
-      if (viewerRole !== "VENDOR") return;
       try {
-        const token = localStorage.getItem("agroshield_token");
+        const token = getStoredAuthToken();
         if (!token) return;
+
+        const payload = decodeJwtPayload(token);
+        if (payload?.userId) setCurrentUserId(payload.userId);
+        if (payload?.role === "FARMER" || payload?.role === "VENDOR") {
+          setCurrentUserRole(payload.role);
+        }
+
         const res = await fetch("/api/auth/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok) {
-          const data = await res.json();
-          setCurrentUserId(data?.user?.id ?? null);
-          setCurrentUserRole(data?.user?.role ?? "VENDOR");
-        }
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setCurrentUserId(data?.user?.id ?? payload?.userId ?? null);
+        setCurrentUserRole(data?.user?.role ?? payload?.role ?? "VENDOR");
       } catch {
         setCurrentUserRole("VENDOR");
       }
@@ -384,7 +391,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
                   </button>
                 )}
 
-                {caseData.escrow.status === "DEPOSITED" && (
+                {(caseData.escrow.status === "FUNDED" || caseData.escrow.status === "DEPOSITED") && (
                   <div className="space-y-4">
                     <div className="rounded-2xl bg-green-50 p-4 text-center">
                       <p className="text-xs font-semibold text-green-700">Funds secured in Escrow</p>
@@ -392,6 +399,8 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
                     {currentUserRole === "VENDOR" && (
                       <MarkTreatmentDoneButton 
                         caseId={id} 
+                        currentStatus={caseData.status}
+                        assignedVendorId={caseData.assignedVendorId ?? null}
                         contractId={caseData.escrow.contractId!}
                         onSuccess={fetchCase}
                       />
@@ -427,7 +436,14 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
           </div>
 
           <div className="mt-6 px-4">
-            <RaiseDisputeButton caseId={id} onDisputeRaised={fetchCase} />
+            {caseData.escrow?.contractId ? (
+              <RaiseDisputeButton
+                caseId={id}
+                escrowContractId={caseData.escrow.contractId}
+                farmerWalletAddress={caseData.farmer.walletAddress ?? ""}
+                onDisputeRaised={fetchCase}
+              />
+            ) : null}
           </div>
         </aside>
       </div>

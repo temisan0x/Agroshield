@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { resolveDispute } from "@/lib/trustlesswork";
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +31,18 @@ export async function POST(request: NextRequest) {
         case: {
           include: {
             escrow: true,
+            farmer: {
+              select: { walletAddress: true },
+            },
+            bids: {
+              where: { selected: true },
+              select: {
+                vendor: {
+                  select: { walletAddress: true },
+                },
+              },
+              take: 1,
+            },
           },
         },
       },
@@ -64,37 +77,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Call Trustless Work API
-    const twResponse = await fetch("https://dev.api.trustlesswork.com/escrow/resolve-dispute", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.TRUSTLESS_WORK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        contractId,
-        signer: process.env.PLATFORM_RESOLVER_ADDRESS,
-        resolution: resolutionType,
-        farmerPercent: resolutionType === "SPLIT" ? farmerPercent : undefined,
-        vendorPercent: resolutionType === "SPLIT" ? vendorPercent : undefined,
-      }),
-    });
-
-    const twData = await twResponse.json();
-
-    if (!twResponse.ok) {
-      return NextResponse.json(
-        { error: twData.error || twData.message || "Trustless Work API error" },
-        { status: twResponse.status }
-      );
+    const resolverAddress = process.env.PLATFORM_RESOLVER_ADDRESS;
+    if (!resolverAddress) {
+      return NextResponse.json({ error: "PLATFORM_RESOLVER_ADDRESS is required" }, { status: 500 });
     }
+
+    const totalAmount = Number(dispute.case.escrow?.amount ?? 0);
+    if (Number.isNaN(totalAmount) || totalAmount <= 0) {
+      return NextResponse.json({ error: "Invalid escrow amount" }, { status: 400 });
+    }
+
+    const farmerAddress = dispute.case.farmer.walletAddress;
+    const vendorAddress = dispute.case.bids[0]?.vendor.walletAddress;
+
+    if (!farmerAddress) {
+      return NextResponse.json({ error: "Farmer wallet address missing" }, { status: 400 });
+    }
+
+    if ((resolutionType === "RELEASE_VENDOR" || resolutionType === "SPLIT") && !vendorAddress) {
+      return NextResponse.json({ error: "Vendor wallet address missing" }, { status: 400 });
+    }
+
+    const distributions =
+      resolutionType === "REFUND_FARMER"
+        ? [{ address: farmerAddress, amount: totalAmount }]
+        : resolutionType === "RELEASE_VENDOR"
+          ? [{ address: vendorAddress!, amount: totalAmount }]
+          : [
+              { address: farmerAddress, amount: Math.round((totalAmount * farmerPercent) / 100) },
+              {
+                address: vendorAddress!,
+                amount: totalAmount - Math.round((totalAmount * farmerPercent) / 100),
+              },
+            ];
+
+    // Call Trustless Work API
+    const twData = await resolveDispute({
+      contractId,
+      disputeResolver: resolverAddress,
+      distributions,
+    });
 
     // Update DB after successful TW call
     await prisma.dispute.update({
       where: { id: disputeId },
       data: {
         status: "RESOLVED",
-        resolvedBy: process.env.PLATFORM_RESOLVER_ADDRESS,
+        resolvedBy: resolverAddress,
       },
     });
 
@@ -103,9 +132,7 @@ export async function POST(request: NextRequest) {
       data: { status: "RESOLVED" },
     });
 
-    return NextResponse.json({
-      unsignedTransaction: twData.unsignedTransaction,
-    });
+    return NextResponse.json({ unsignedTransaction: twData.unsignedTransaction });
   } catch (error) {
     console.error("[DISPUTE_RESOLVE]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
