@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { type BidStatus, STATUS_STYLES } from "./types";
 
@@ -11,6 +12,7 @@ interface BidRowProps {
   status: BidStatus;
   index?: number;
   onClick?: () => void;
+  action?: ReactNode;
 }
 
 export default function BidRow({
@@ -21,6 +23,7 @@ export default function BidRow({
   status,
   index = 0,
   onClick,
+  action,
 }: BidRowProps) {
   const reduceMotion = useReducedMotion();
   const s = STATUS_STYLES[status];
@@ -55,6 +58,8 @@ export default function BidRow({
         <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
         {s.label}
       </span>
+
+      {action ? <div className="ml-2 flex items-center">{action}</div> : null}
     </motion.div>
   );
 }

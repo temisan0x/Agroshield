@@ -1,45 +1,95 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useRouter } from "next/navigation";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import { useAuthStatus, useHydrated } from "@/lib/auth-client";
+
+type DiagnoseStep = "upload" | "result" | "post";
+
+type DiagnosisResult = {
+  disease?: string;
+  confidence?: number;
+  urgency?: string;
+  recovery_days?: number;
+  caused_by?: string;
+  pesticide?: string;
+  symptoms?: string;
+  treatment?: string;
+  preventive_measures?: string;
+  [key: string]: unknown;
+};
 
 export default function DiagnosePage() {
   const reduceMotion = useReducedMotion();
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  const [freeRemaining, setFreeRemaining] = useState(3);
-  const [showGate, setShowGate] = useState(false);
+  const router = useRouter();
+  const isAuthed = useAuthStatus();
+  const hydrated = useHydrated();
+  const [step, setStep] = useState<DiagnoseStep>("upload");
+  const [userRole, setUserRole] = useState<"FARMER" | "VENDOR" | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [diagnosis, setDiagnosis] = useState<Record<string, unknown> | null>(null);
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
+  const [freeRemaining, setFreeRemaining] = useState(3);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [urgency, setUrgency] = useState<"LOW" | "MEDIUM" | "HIGH">("MEDIUM");
+  const [location, setLocation] = useState("");
+  const [description, setDescription] = useState("");
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!hydrated) return;
+
     const token = localStorage.getItem("agroshield_token");
-    setIsAuthed(Boolean(token));
-    setHydrated(true);
-  }, []);
+    if (!token) {
+      setUserRole(null);
+      return;
+    }
 
-  const canRun = useMemo(() => (isAuthed ? true : freeRemaining > 0), [isAuthed, freeRemaining]);
+    fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.user?.role === "FARMER" || data?.user?.role === "VENDOR") {
+          setUserRole(data.user.role);
+        } else {
+          setUserRole(null);
+        }
+      })
+      .catch(() => setUserRole(null));
+  }, [hydrated]);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    setSelectedFile(file);
+  const progressWidth = useMemo(() => {
+    if (step === "upload") return "w-1/3";
+    if (step === "result") return "w-2/3";
+    return "w-full";
+  }, [step]);
+
+  const clearStep = () => {
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setImageDataUrl(null);
     setDiagnosis(null);
     setError(null);
-    if (file) {
-      setPreviewUrl(URL.createObjectURL(file));
-    } else {
-      setPreviewUrl(null);
-    }
+    setPostError(null);
+    setTitle("");
+    setUrgency("MEDIUM");
+    setLocation("");
+    setDescription("");
+    setSuccessMessage(null);
+    setStep("upload");
   };
 
-  const fileToBase64 = (file: File) =>
-    new Promise<{ base64: string; mimeType: string }>((resolve, reject) => {
+  const fileToDataUrl = (file: File) =>
+    new Promise<{ url: string; base64: string; mimeType: string }>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result?.toString() ?? "";
@@ -48,45 +98,75 @@ export default function DiagnosePage() {
           reject(new Error("Invalid image data"));
           return;
         }
-        resolve({ base64: parts[1], mimeType: file.type || "image/jpeg" });
+        resolve({ url: result, base64: parts[1], mimeType: file.type || "image/jpeg" });
       };
       reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
       reader.readAsDataURL(file);
     });
 
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) return;
+
+    setSelectedFile(file);
+    setError(null);
+    setDiagnosis(null);
+    setStep("upload");
+
+    const { url } = await fileToDataUrl(file);
+    setPreviewUrl(url);
+    setImageDataUrl(url);
+  };
+
+  const handleDrop = async (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0] ?? null;
+    if (!file) return;
+    await handleFileChange({ target: { files: [file] } } as any);
+  };
+
   const handleRun = async () => {
-    if (!canRun) {
-      setShowGate(true);
-      setShowSignupPrompt(true);
+    if (!selectedFile || !imageDataUrl) {
+      setError("Please upload a crop photo first.");
       return;
     }
 
-    if (!selectedFile) {
-      setError("Please upload a crop photo first.");
+    if (!isAuthed && freeRemaining <= 0) {
+      setError("Free credits are used. Please log in to continue.");
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    setShowGate(false);
 
     try {
-      const { base64, mimeType } = await fileToBase64(selectedFile);
+      const { base64, mimeType } = await fileToDataUrl(selectedFile);
       const response = await fetch("/api/diagnose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: base64, mimeType }),
       });
 
-      const data = (await response.json()) as { diagnosis?: Record<string, unknown> };
+      const data = (await response.json()) as { diagnosis?: DiagnosisResult; error?: string };
       if (!response.ok || !data.diagnosis) {
-        throw new Error("Diagnosis failed. Please try again.");
+        throw new Error(data.error ?? "Diagnosis failed. Please try again.");
       }
 
-      setDiagnosis(data.diagnosis);
-      setFreeRemaining((value) => Math.max(0, value - 1));
-      if (freeRemaining <= 1) {
-        setShowSignupPrompt(true);
+      const result = data.diagnosis;
+      setDiagnosis(result);
+      setStep("result");
+      setTitle(`${result.disease ?? "Crop issue"}`);
+      setUrgency(
+        String(result.urgency ?? "MEDIUM").toUpperCase().startsWith("H")
+          ? "HIGH"
+          : String(result.urgency ?? "MEDIUM").toUpperCase().startsWith("L")
+          ? "LOW"
+          : "MEDIUM"
+      );
+      setLocation("");
+      setDescription(String(result.treatment ?? result.symptoms ?? ""));
+      if (!isAuthed) {
+        setFreeRemaining((value) => Math.max(0, value - 1));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -95,157 +175,345 @@ export default function DiagnosePage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#F5F0EB]">
-      <Nav />
-      <main className="pt-32 pb-24">
-        <div className="mx-auto max-w-4xl px-6">
-          <motion.div
-            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="rounded-2xl border border-neutral-100 bg-white p-8 shadow-sm md:p-10"
-          >
-            <div className="inline-flex rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-[#16a34a]">
-              AI Diagnosis
-            </div>
-            <h1 className="mt-4 font-[family-name:var(--font-manrope)] text-4xl font-bold text-neutral-900">
-              Diagnose your crop in seconds
-            </h1>
-            <p className="mt-3 font-[family-name:var(--font-inter)] text-base text-neutral-500">
-              Upload a photo and get an instant disease report. The first 3 diagnoses are free — no
-              sign-in required.
-            </p>
+  const handleSubmitCase = async () => {
+    if (!imageDataUrl || !diagnosis) {
+      setPostError("Missing diagnosis or uploaded photo.");
+      return;
+    }
 
-            <div className="mt-8 grid gap-6 md:grid-cols-3">
-              <div className="md:col-span-2">
-                <label className="block rounded-2xl border border-dashed border-neutral-200 bg-[#F5F0EB] p-8 text-center">
-                  <div className="text-sm text-neutral-500">
-                    Drop your crop photo here or click to upload
-                  </div>
+    if (!userRole) {
+      setPostError("Farmer access is required to post this case.");
+      return;
+    }
+
+    setIsPosting(true);
+    setPostError(null);
+
+    try {
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) throw new Error("Please log in to post the case.");
+
+      const body = {
+        imageUrl: imageDataUrl,
+        diagnosis: {
+          ...diagnosis,
+          title,
+          urgency,
+          location,
+          description,
+        },
+      };
+
+      const response = await fetch("/api/cases/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to post case.");
+      }
+
+      setSuccessMessage("Case posted successfully.");
+      router.push("/marketplace");
+    } catch (err) {
+      setPostError(err instanceof Error ? err.message : "Unable to post case.");
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const stepLabel = step === "upload" ? "Step 1 of 3" : step === "result" ? "Step 2 of 3" : "Step 3 of 3";
+  const stepTitle =
+    step === "upload"
+      ? "Diagnose your crop"
+      : step === "result"
+      ? "Diagnosis Complete"
+      : "Post to Marketplace";
+  const stepSubtitle =
+    step === "upload"
+      ? "Upload a clear photo of the affected leaves or plant area."
+      : step === "result"
+      ? `Detected: ${String(diagnosis?.disease ?? "Unknown issue")}`
+      : "Vendors near you will see this and submit bids.";
+  const confidencePercent = (() => {
+    if (diagnosis?.confidence == null) return null;
+    const numeric = Number(diagnosis.confidence);
+    if (Number.isNaN(numeric)) return null;
+    const percent = numeric <= 1 ? numeric * 100 : numeric;
+    return Math.max(0, Math.min(100, Math.round(percent)));
+  })();
+
+  return (
+    <div className="min-h-screen bg-[var(--background)]">
+      <Nav />
+      <main className="pt-28 pb-24">
+        <div className="mx-auto max-w-2xl px-6 py-16">
+          <div className="mb-6 h-1 overflow-hidden rounded-full bg-neutral-200">
+            <motion.div
+              className={`h-full rounded-full bg-[#16a34a] ${progressWidth}`}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+
+          <div className="mb-6 space-y-3">
+            <span className="inline-flex rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-500">
+              {stepLabel}
+            </span>
+            <h1 className="font-[family-name:var(--font-manrope)] text-4xl font-extrabold text-neutral-900 tracking-tight">
+              {stepTitle}
+            </h1>
+            <p className="max-w-xl text-base text-neutral-500">{stepSubtitle}</p>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {step === "upload" ? (
+              <motion.div
+                key="upload"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="space-y-6 rounded-3xl border border-neutral-200 bg-white p-8 shadow-sm"
+              >
+                <label
+                  className="group block cursor-pointer rounded-3xl border-2 border-dashed border-neutral-300 bg-white p-12 text-center transition hover:border-[#16a34a] hover:bg-[#f0faf0]"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={handleDrop}
+                >
+                  <div className="text-4xl">🌿</div>
+                  <p className="mt-4 text-sm font-medium text-neutral-900">Drop your photo here</p>
+                  <p className="mt-2 text-xs text-neutral-400">or click to browse</p>
                   <input
                     type="file"
                     accept="image/*"
                     className="hidden"
                     onChange={handleFileChange}
                   />
-                  <span className="mt-4 inline-flex rounded-full bg-neutral-900 px-6 py-2 text-sm text-white">
-                    Upload image
-                  </span>
                 </label>
 
                 {previewUrl ? (
-                  <div className="mt-6 overflow-hidden rounded-2xl border border-neutral-100">
-                    <img alt="Crop preview" src={previewUrl} className="w-full object-cover" />
+                  <div className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-sm">
+                    <img src={previewUrl} alt="Selected crop" className="h-72 w-full object-cover" />
                   </div>
                 ) : null}
 
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <button
-                    onClick={handleRun}
-                    className="rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Analyzing..." : "Run diagnosis"}
-                  </button>
-                  {hydrated && !isAuthed ? (
-                    <a className="text-sm text-neutral-500 underline" href="/signup">
-                      Create account for unlimited use
-                    </a>
-                  ) : null}
-                </div>
-
                 {error ? (
-                  <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
                     {error}
                   </div>
                 ) : null}
 
-                {showGate ? (
-                  <div className="mt-6 rounded-2xl border border-neutral-100 bg-white p-4 text-sm text-neutral-500">
-                    You have used all free diagnoses. Please log in to continue.
-                  </div>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={handleRun}
+                  disabled={isLoading || !selectedFile}
+                  className="inline-flex items-center justify-center rounded-full bg-neutral-900 px-8 py-3.5 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isLoading ? "Analyzing..." : "Run Diagnosis →"}
+                </button>
+              </motion.div>
+            ) : step === "result" ? (
+              <motion.div
+                key="result"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="space-y-6 rounded-3xl border border-neutral-200 bg-white p-8 shadow-sm"
+              >
+                <div className="space-y-4">
+                  <div className="rounded-3xl border border-neutral-100 bg-[#F5F0EB] p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
+                          Diagnosis result
+                        </p>
+                        <h2 className="mt-2 font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">
+                          {diagnosis?.disease ?? "Unknown issue"}
+                        </h2>
+                      </div>
+                      <span className="rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                        {String(diagnosis?.urgency ?? "MEDIUM").toUpperCase()}
+                      </span>
+                    </div>
 
-                {diagnosis ? (
-                  <div className="mt-6 rounded-2xl border border-neutral-100 bg-white p-5 text-sm text-neutral-600">
-                    <div className="text-xs uppercase tracking-wide text-neutral-400">Diagnosis</div>
-                    <div className="mt-2 font-[family-name:var(--font-manrope)] text-lg text-neutral-900">
-                      {String(diagnosis.disease ?? "Unknown issue")}
+                    <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                        <p className="text-xs text-neutral-400">Confidence</p>
+                        <p className="mt-2 text-lg font-semibold text-neutral-900">
+                          {confidencePercent != null ? `${confidencePercent}%` : "-"}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                        <p className="text-xs text-neutral-400">Recommended pesticide</p>
+                        <p className="mt-2 text-lg font-semibold text-neutral-900">
+                          {String(diagnosis?.pesticide ?? "N/A")}
+                        </p>
+                      </div>
                     </div>
-                    <div className="mt-2 text-sm text-neutral-500">
-                      Confidence: {String(diagnosis.confidence ?? "-")}%
-                    </div>
-                    <div className="mt-4 grid gap-2 text-xs text-neutral-500 md:grid-cols-2">
-                      <div>Urgency: {String(diagnosis.urgency ?? "-")}</div>
-                      <div>Recovery days: {String(diagnosis.recovery_days ?? "-")}</div>
-                      <div>Caused by: {String(diagnosis.caused_by ?? "-")}</div>
-                      <div>Pesticide: {String(diagnosis.pesticide ?? "-")}</div>
-                    </div>
-                    <div className="mt-3 text-sm text-neutral-500">
-                      Symptoms: {String(diagnosis.symptoms ?? "-")}
-                    </div>
-                    <div className="mt-2 text-sm text-neutral-500">
-                      Treatment: {String(diagnosis.treatment ?? "-")}
-                    </div>
-                    <div className="mt-2 text-sm text-neutral-500">
-                      Preventive measures: {String(diagnosis.preventive_measures ?? "-")}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
 
-              <div className="h-fit self-start rounded-2xl border border-neutral-100 bg-white p-6 shadow-sm">
-                <div className="text-xs text-neutral-400">Free diagnoses remaining</div>
-                <div className="mt-2 font-[family-name:var(--font-manrope)] text-3xl font-bold text-neutral-900">
-                  {isAuthed ? "Unlimited" : freeRemaining}
+                    <div className="grid gap-3 rounded-2xl border border-neutral-100 bg-white p-4 text-sm text-neutral-600 md:grid-cols-2">
+                      <div>Recovery days: {String(diagnosis?.recovery_days ?? "-")}</div>
+                      <div>Caused by: {String(diagnosis?.caused_by ?? "-")}</div>
+                    </div>
+                    <p className="text-sm text-neutral-500">Symptoms: {String(diagnosis?.symptoms ?? "-")}</p>
+                    <p className="text-sm text-neutral-500">Treatment: {String(diagnosis?.treatment ?? "-")}</p>
+                  </div>
                 </div>
-                <div className="mt-4 text-sm text-neutral-500">
-                  {isAuthed
-                    ? "You are signed in and can run unlimited diagnoses."
-                    : "After the free limit, sign in to unlock unlimited diagnoses and escrow tools."}
-                </div>
-                {hydrated && !isAuthed ? (
-                  <a
-                    className="mt-6 inline-flex rounded-full bg-[#16a34a] px-4 py-2 text-xs font-semibold text-white"
-                    href="/login"
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={userRole === "FARMER" ? () => setStep("post") : undefined}
+                    disabled={userRole !== "FARMER"}
+                    className={`rounded-full px-6 py-3 text-sm font-semibold transition ${
+                      userRole === "FARMER"
+                        ? "bg-neutral-900 text-white hover:bg-neutral-800"
+                        : "bg-neutral-100 text-neutral-400"
+                    }`}
                   >
-                    Log in
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          </motion.div>
+                    {userRole === "FARMER" ? "Post to Marketplace →" : "Farmer access required"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearStep();
+                      setStep("upload");
+                    }}
+                    className="rounded-full px-6 py-3 text-sm font-semibold text-neutral-500 transition hover:text-neutral-900"
+                  >
+                    Diagnose Another
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="post"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="space-y-6 rounded-3xl border border-neutral-200 bg-white p-8 shadow-sm"
+              >
+                <div className="space-y-4">
+                  <div className="rounded-3xl border border-neutral-100 bg-[#F5F0EB] p-6">
+                    <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">Case details</p>
+                    <h2 className="mt-2 font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">
+                      Post to Marketplace
+                    </h2>
+                    <p className="mt-2 text-sm text-neutral-500">
+                      Vendors near you will see this and submit bids.
+                    </p>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div>
+                      <label className="text-sm font-medium text-neutral-700">Case title</label>
+                      <input
+                        type="text"
+                        value={title}
+                        onChange={(event) => setTitle(event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-[#16a34a] focus:ring-2 focus:ring-[#16a34a]/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-neutral-700">Detected disease</label>
+                      <input
+                        type="text"
+                        value={diagnosis?.disease ?? ""}
+                        readOnly
+                        className="mt-2 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-500 outline-none cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-neutral-700">Urgency</span>
+                      <div className="mt-3 flex gap-2">
+                        {(["LOW", "MEDIUM", "HIGH"] as const).map((level) => (
+                          <button
+                            key={level}
+                            type="button"
+                            onClick={() => setUrgency(level)}
+                            className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                              urgency === level
+                                ? "bg-neutral-900 text-white"
+                                : "border border-neutral-200 bg-white text-neutral-600 hover:text-neutral-900"
+                            }`}
+                          >
+                            {level}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-neutral-700">Your location (city / region)</label>
+                      <input
+                        type="text"
+                        value={location}
+                        onChange={(event) => setLocation(event.target.value)}
+                        placeholder="e.g. City, Region"
+                        className="mt-2 w-full rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-[#16a34a] focus:ring-2 focus:ring-[#16a34a]/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-neutral-700">Describe the problem (optional)</label>
+                      <textarea
+                        rows={3}
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        placeholder="Add any extra details about symptoms, affected area size, etc."
+                        className="mt-2 w-full resize-none rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-[#16a34a] focus:ring-2 focus:ring-[#16a34a]/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-neutral-700">Uploaded photo</label>
+                      {previewUrl ? (
+                        <img
+                          src={previewUrl}
+                          alt="Uploaded crop"
+                          className="mt-3 h-32 w-full rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-8 text-center text-sm text-neutral-400">
+                          No image uploaded
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {postError ? (
+                    <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                      {postError}
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={handleSubmitCase}
+                      disabled={isPosting}
+                      className="flex-1 rounded-full bg-[#16a34a] px-8 py-3.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {isPosting ? "Posting..." : "Post Case →"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep("upload")}
+                      className="flex-1 rounded-full border border-neutral-200 bg-white px-8 py-3.5 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-100"
+                    >
+                      Back to Diagnose
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </main>
-      {showSignupPrompt ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-6">
-          <div className="w-full max-w-md rounded-2xl border border-neutral-100 bg-white p-6 shadow-sm">
-            <div className="text-xs uppercase tracking-wide text-neutral-400">Create account</div>
-            <h2 className="mt-2 font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">
-              Unlock unlimited diagnoses
-            </h2>
-            <p className="mt-2 text-sm text-neutral-500">
-              You have used the free diagnoses. Create an account to keep analyzing crops and
-              access escrow tools.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a
-                href="/signup"
-                className="rounded-full bg-neutral-900 px-5 py-2 text-sm font-medium text-white"
-              >
-                Create account
-              </a>
-              <button
-                onClick={() => setShowSignupPrompt(false)}
-                className="rounded-full border border-neutral-200 px-5 py-2 text-sm text-neutral-600"
-              >
-                Maybe later
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       <Footer />
     </div>
   );
