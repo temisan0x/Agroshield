@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notifyAuthChange } from "@/lib/auth-client";
-import { requestAccess } from "@stellar/freighter-api";
+import { requestAccess, getAddress } from "@stellar/freighter-api";
 
 type ProfileItem = {
   id: string;
@@ -96,6 +96,26 @@ function truncateAddress(address: string | null) {
   if (!address) return "Not connected";
   if (address.length <= 8) return address;
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
+}
+
+function updateProfileWallet(
+  current: ProfileState,
+  walletAddress: string | null
+): ProfileState {
+  if (current.status !== "ready") {
+    return current;
+  }
+
+  return {
+    status: "ready",
+    profile: {
+      ...current.profile,
+      user: {
+        ...current.profile.user,
+        walletAddress,
+      },
+    },
+  };
 }
 
 function fileToDataUrl(file: File) {
@@ -342,7 +362,19 @@ export default function ProfileDashboard() {
         throw new Error(access.error.message ?? "Failed to request access.");
       }
 
-      if (!access.address) {
+      let walletAddress = access.address?.trim() ?? "";
+      if (!walletAddress) {
+        const addressResult = await withTimeout(getAddress(), 15000);
+        if (addressResult.error) {
+          throw new Error(
+            addressResult.error.message ?? "Failed to retrieve wallet address from Freighter."
+          );
+        }
+
+        walletAddress = addressResult.address.trim();
+      }
+
+      if (!walletAddress) {
         throw new Error("Failed to retrieve wallet address from Freighter.");
       }
 
@@ -352,7 +384,7 @@ export default function ProfileDashboard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ walletAddress: access.address }),
+        body: JSON.stringify({ walletAddress }),
       });
 
       const data = (await response.json()) as { success?: boolean; walletAddress?: string; error?: string };
@@ -361,7 +393,9 @@ export default function ProfileDashboard() {
         throw new Error(data.error ?? "Failed to save wallet address.");
       }
 
-      setRetryKey((value) => value + 1);
+      const savedWalletAddress = data.walletAddress ?? walletAddress;
+      setState((current) => updateProfileWallet(current, savedWalletAddress));
+      setEditForm((current) => ({ ...current, walletAddress: savedWalletAddress }));
     } catch (err) {
       setWalletError(err instanceof Error ? err.message : "Failed to connect wallet.");
     } finally {
@@ -384,7 +418,8 @@ export default function ProfileDashboard() {
       });
 
       if (response.ok) {
-        setRetryKey((value) => value + 1);
+        setState((current) => updateProfileWallet(current, null));
+        setEditForm((current) => ({ ...current, walletAddress: "" }));
       }
     } catch {
       // Silently fail
