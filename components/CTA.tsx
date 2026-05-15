@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 export default function CTA() {
   return (
     <section className="py-24">
-      <div className="mx-auto max-w-4xl px-6">
+      <div className="mx-auto max-w-5xl px-6">
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           whileInView={{ opacity: 1, scale: 1 }}

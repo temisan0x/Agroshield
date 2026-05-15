@@ -46,9 +46,9 @@ export async function GET(
 
     const stats = {
       totalBids: vendor.bids.length,
-      wonBids: vendor.bids.filter((b) => b.selected).length,
+      wonBids: vendor.bids.filter((b: any) => b.selected).length,
       completedTreatments: vendor.bids.filter(
-        (b) => b.selected && b.case.status === "COMPLETED"
+        (b: any) => b.selected && b.case.status === "COMPLETED"
       ).length,
     };
 

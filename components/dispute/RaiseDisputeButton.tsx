@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { motion, useReducedMotion, AnimatePresence } from "motion/react";
-import { signTransaction, isConnected } from "@stellar/freighter-api";
+import { signTransaction, connectWallet } from "@/lib/walletKit";
+import { sendSignedTransaction } from "@/lib/trustlesswork";
 
 interface RaiseDisputeButtonProps {
   caseId: string;
@@ -38,10 +39,10 @@ export default function RaiseDisputeButton({
       const token = localStorage.getItem("agroshield_token");
       if (!token) throw new Error("Please log in again to continue.");
 
-      // Check Freighter
-      const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
-      if (!freighterReady.isConnected) {
-        throw new Error("Please install or enable Freighter wallet to continue.");
+      // Ensure wallet is connected
+      let walletAddress = farmerWalletAddress;
+      if (!walletAddress) {
+        walletAddress = await connectWallet();
       }
 
       // 1. POST /api/disputes/raise
@@ -51,7 +52,7 @@ export default function RaiseDisputeButton({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ caseId, reason }),
+        body: JSON.stringify({ caseId, reason, contractId: escrowContractId }),
       });
 
       if (!raiseRes.ok) {
@@ -61,39 +62,20 @@ export default function RaiseDisputeButton({
 
       const { unsignedTransaction } = await raiseRes.json();
 
-      // 2. Sign with Freighter
+      // 2. Sign with our new kit on TESTNET
       setStatus("signing");
-      const signedResult = await signTransaction(unsignedTransaction, {
-        networkPassphrase: "Test SDF Network ; September 2015",
+      const signedXdr = await signTransaction({
+        unsignedTransaction,
+        address: walletAddress,
       });
 
-      if (typeof signedResult === "object" && "error" in signedResult) {
-        throw new Error(signedResult.error.message || "Transaction was rejected in Freighter");
-      }
-
-      const signedXdr =
-        typeof signedResult === "string"
-          ? signedResult
-          : (signedResult as any).signedTxXdr || (signedResult as any).signedTransaction;
-      
       if (!signedXdr) {
-        throw new Error("Failed to get signed XDR from Freighter");
+        throw new Error("Failed to get signed XDR from wallet");
       }
 
-      // 3. Send transaction
+      // 3. Send transaction via Trustless Work
       setStatus("sending");
-      const sendRes = await fetch("https://dev.api.trustlesswork.com/helper/send-transaction", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ signedXdr }),
-      });
-
-      if (!sendRes.ok) {
-        const data = await sendRes.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to send transaction");
-      }
+      await sendSignedTransaction(signedXdr);
 
       setStatus("success");
       onDisputeRaised?.();
@@ -162,7 +144,7 @@ export default function RaiseDisputeButton({
                         Dispute raised
                       </p>
                       <p className="text-sm text-neutral-500 font-[family-name:var(--font-inter)]">
-                        We'll review within 48 hours.
+                        We&apos;ll review within 48 hours.
                       </p>
                     </motion.div>
                   ) : (
@@ -190,8 +172,9 @@ export default function RaiseDisputeButton({
                         </div>
 
                         <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-4 text-sm text-yellow-800 font-[family-name:var(--font-inter)]">
-                          ⚠ Raising a dispute will freeze the escrow. Funds will not move until
-                          our team resolves it.
+                        {"⚠ Raising a dispute will freeze the escrow. Funds will not move until"}
+                        {" "}
+                        our team resolves it.
                         </div>
 
                         {error && (
@@ -221,7 +204,7 @@ export default function RaiseDisputeButton({
                             {status === "loading"
                               ? "Submitting..."
                               : status === "signing"
-                              ? "Sign with Freighter..."
+                              ? "Signing..."
                               : status === "sending"
                               ? "Sending..."
                               : "Raise Dispute →"}

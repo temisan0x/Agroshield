@@ -14,7 +14,7 @@ type SectionProps = {
 export default function Section({ id, label, heading, subheading, children }: SectionProps) {
   return (
     <section id={id} className="py-24">
-      <div className="mx-auto max-w-4xl px-6">
+      <div className="mx-auto max-w-6xl px-6">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           whileInView={{ opacity: 1, y: 0 }}

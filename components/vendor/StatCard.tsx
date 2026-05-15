@@ -17,7 +17,7 @@ export default function StatCard({ label, value, delay = 0, helper }: StatCardPr
       initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay, ease: "easeOut" }}
-      className="rounded-2xl border border-neutral-100 bg-white p-5"
+      className="rounded-2xl bg-white/40 p-5 shadow-sm"
     >
       <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
         {label}

@@ -14,7 +14,7 @@ const fadeUp = {
 export default function Hero() {
   return (
     <section className="pt-32 pb-24">
-      <div className="mx-auto max-w-4xl px-6">
+      <div className="mx-auto max-w-5xl px-6">
         <motion.div
           initial="hidden"
           animate="visible"
