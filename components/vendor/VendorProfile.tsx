@@ -13,6 +13,10 @@ import { motion, useReducedMotion } from "motion/react";
 import type { VendorProfileData, VendorProfilePayload } from "@/app/vendor/profile/types";
 import { connectFreighterWallet } from "@/lib/freighter-wallet";
 import StatCard from "./StatCard";
+import {
+  connectFreighterWallet,
+  getExpectedWalletNetworkLabel,
+} from "@/lib/freighter-wallet";
 
 type ProfileFieldValue = VendorProfilePayload[keyof VendorProfilePayload];
 
@@ -235,14 +239,21 @@ export default function VendorProfile() {
     }
 
     try {
-      const { requestAccess, getAddress } = await import("@stellar/freighter-api");
-      const access = await requestAccess();
-      if (access.error) {
-        throw new Error(access.error.message ?? "Failed to request access.");
+      // Try both connection methods for compatibility
+      let address: string | null = null;
+      try {
+        const { requestAccess, getAddress } = await import("@stellar/freighter-api");
+        const access = await requestAccess();
+        if (access.error) {
+          throw new Error(access.error.message ?? "Failed to request access.");
+        }
+        const helperAddress = await connectFreighterWallet().catch(() => null);
+        address = access.address ?? (await getAddress()).address ?? helperAddress;
+      } catch {
+        // fallback to new connectFreighterWallet
+        const result = await connectFreighterWallet();
+        address = typeof result === "string" ? result : result?.address;
       }
-
-      const helperAddress = await connectFreighterWallet().catch(() => null);
-      const address = access.address ?? (await getAddress()).address ?? helperAddress;
       if (!address) {
         throw new Error("Failed to retrieve wallet address from Freighter.");
       }
@@ -391,6 +402,7 @@ export default function VendorProfile() {
               <StatCard label="Joined" value={joined} delay={0.25} />
             </div>
 
+<<<<<<< HEAD
             <div className="mt-4">
               {profile?.walletAddress ? (
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
@@ -423,6 +435,34 @@ export default function VendorProfile() {
                   </p>
                 </div>
               )}
+=======
+             {/* Wallet connection */}
+             <div className="mt-4">
+               {profile?.walletAddress ? (
+                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
+                     Wallet
+                   </div>
+                   <div className="mt-1 break-all font-[family-name:var(--font-manrope)] text-sm font-semibold text-neutral-900">
+                     {profile.walletAddress}
+                   </div>
+                   <p className="mt-2 text-xs text-neutral-400">
+                     Freighter will re-confirm the active wallet every time you connect.
+                     {getExpectedWalletNetworkLabel() !== "any Stellar network"
+                       ? ` Expected network: ${getExpectedWalletNetworkLabel()}.`
+                       : ""}
+                   </p>
+                 </div>
+               ) : (
+                 <button
+                   type="button"
+                   onClick={handleConnectWallet}
+                   disabled={connectingWallet}
+                   className="w-full rounded-2xl border border-neutral-200 bg-[#16a34a] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-70"
+                 >
+                   {connectingWallet ? "Connecting..." : "Connect Wallet"}
+                 </button>
+               )}
               {walletError ? (
                 <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
                   {walletError}

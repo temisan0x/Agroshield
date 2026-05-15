@@ -28,23 +28,23 @@ function Nav() {
   const pathname = usePathname();
   const [role, setRole] = useState<UserRole>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  // Merge both menu states and refs
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!hydrated) return;
-
     try {
       const token = localStorage.getItem("agroshield_token");
-
       if (!token) {
         queueMicrotask(() => {
           setRole(null);
         });
         return;
       }
-
       const payload = JSON.parse(atob(token.split(".")[1]));
       queueMicrotask(() => {
         setRole(payload?.role ?? null);
@@ -96,45 +96,73 @@ function Nav() {
     };
   }, [hydrated, isAuthed]);
 
+<<<<<<< HEAD
   const profileRoute = role === "VENDOR" ? "/vendor/profile" : "/farmer/profile";
 
   useEffect(() => {
-    if (!menuOpen) return;
-
-    function handlePointerDown(event: PointerEvent) {
+    // Merge both menu open effects
+    function handlePointerDown(event: MouseEvent | PointerEvent) {
       const target = event.target as Node;
-      const clickedInsideMenu = menuRef.current?.contains(target);
-      const clickedProfileButton = profileButtonRef.current?.contains(target);
-
-      if (!clickedInsideMenu && !clickedProfileButton) {
-        setMenuOpen(false);
+      // Handle old menu
+      if (menuOpen) {
+        const clickedInsideMenu = menuRef.current?.contains(target);
+        const clickedProfileButton = profileButtonRef.current?.contains(target);
+        if (!clickedInsideMenu && !clickedProfileButton) {
+          setMenuOpen(false);
+        }
+      }
+      // Handle new menu
+      if (isProfileMenuOpen) {
+        const menu = profileMenuRef.current;
+        const button = profileButtonRef.current;
+        if (!(menu?.contains(target) || button?.contains(target))) {
+          setIsProfileMenuOpen(false);
+        }
       }
     }
-
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setMenuOpen(false);
+        setIsProfileMenuOpen(false);
       }
     }
-
     window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("mousedown", handlePointerDown);
     window.addEventListener("keydown", handleEscape);
-
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [menuOpen]);
+  }, [menuOpen, isProfileMenuOpen]);
 
-  function handleSignOut() {
-    localStorage.removeItem("agroshield_token");
-    notifyAuthChange();
-    setMenuOpen(false);
-    setRole(null);
-    setProfileImage(null);
-    router.push("/login");
-    router.refresh();
-  }
+  // Merge both sign out flows
+  const handleSignOut = async () => {
+    const token = localStorage.getItem("agroshield_token");
+    try {
+      if (token) {
+        await fetch("/api/profile/wallet", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ walletAddress: null }),
+        });
+      }
+    } catch {
+      // Best effort only. Logout must still complete.
+    } finally {
+      localStorage.removeItem("agroshield_token");
+      setMenuOpen(false);
+      setIsProfileMenuOpen(false);
+      setRole(null);
+      setProfileImage(null);
+      notifyAuthChange();
+      router.replace("/login");
+      router.refresh();
+    }
+  };
 
   return (
     <nav className="fixed top-6 left-0 right-0 z-50">
@@ -214,31 +242,33 @@ function Nav() {
           </div>
 
           {hydrated && isAuthed ? (
-            <div className="relative" ref={menuRef}>
+            <div className="relative flex items-center gap-3 text-sm text-neutral-100" ref={menuRef}>
               <button
-                type="button"
                 ref={profileButtonRef}
-                onClick={() => setMenuOpen((value) => !value)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/15"
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-white/10 transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/40"
                 aria-label="Open profile menu"
-                aria-expanded={menuOpen}
                 aria-haspopup="menu"
+                aria-expanded={isProfileMenuOpen || menuOpen}
+                onClick={() => {
+                  setIsProfileMenuOpen((current) => !current);
+                  setMenuOpen((value) => !value);
+                }}
                 title="Open profile menu"
               >
                 {profileImage ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={profileImage}
-                      alt="Profile"
-                      className="h-9 w-9 rounded-full object-cover"
-                    />
-                  </>
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profileImage}
+                    alt="Profile"
+                    className="h-9 w-9 rounded-full object-cover"
+                  />
                 ) : (
                   fallbackAvatar
                 )}
               </button>
 
+              {/* Render both menus for compatibility, only one will show at a time */}
               {menuOpen ? (
                 <div className="absolute right-0 top-12 w-56 overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 py-2 text-sm text-neutral-200 shadow-xl">
                   <Link
@@ -277,6 +307,31 @@ function Nav() {
                     type="button"
                     onClick={handleSignOut}
                     className="block w-full px-4 py-2 text-left text-red-400 transition hover:bg-red-500/10"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
+              {isProfileMenuOpen ? (
+                <div
+                  ref={profileMenuRef}
+                  role="menu"
+                  aria-label="Profile menu"
+                  className="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-52 overflow-hidden rounded-3xl border border-white/10 bg-neutral-900 p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.55)]"
+                >
+                  <Link
+                    href="/profile#settings"
+                    role="menuitem"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="flex w-full items-center rounded-2xl px-4 py-3 text-sm font-medium text-neutral-200 transition hover:bg-white/10 hover:text-white"
+                  >
+                    Settings
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleSignOut}
+                    className="flex w-full items-center rounded-2xl px-4 py-3 text-left text-sm font-medium text-red-300 transition hover:bg-red-500/10 hover:text-red-200"
                   >
                     Sign out
                   </button>
