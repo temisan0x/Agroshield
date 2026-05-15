@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notifyAuthChange } from "@/lib/auth-client";
-import { requestAccess, getAddress } from "@stellar/freighter-api";
+import { requestAccess, getAddress, setAllowed } from "@stellar/freighter-api";
 
 type ProfileItem = {
   id: string;
@@ -357,6 +357,15 @@ export default function ProfileDashboard() {
     }
 
     try {
+      const allowResult = await withTimeout(setAllowed(), 15000);
+      if (allowResult.error) {
+        throw new Error(allowResult.error.message ?? "Failed to authorize Freighter access.");
+      }
+
+      if (!allowResult.isAllowed) {
+        throw new Error("Freighter access was not approved.");
+      }
+
       const access = await withTimeout(requestAccess(), 15000);
       if (access.error) {
         throw new Error(access.error.message ?? "Failed to request access.");
