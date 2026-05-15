@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notifyAuthChange } from "@/lib/auth-client";
-import { requestAccess } from "@stellar/freighter-api";
+import {
+  connectFreighterWallet,
+  getExpectedWalletNetworkLabel,
+} from "@/lib/freighter-wallet";
 
 type ProfileItem = {
   id: string;
@@ -337,14 +340,7 @@ export default function ProfileDashboard() {
     }
 
     try {
-      const access = await withTimeout(requestAccess(), 15000);
-      if (access.error) {
-        throw new Error(access.error.message ?? "Failed to request access.");
-      }
-
-      if (!access.address) {
-        throw new Error("Failed to retrieve wallet address from Freighter.");
-      }
+      const access = await withTimeout(connectFreighterWallet(), 45000);
 
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
@@ -894,6 +890,12 @@ export default function ProfileDashboard() {
                     {walletError}
                   </div>
                 ) : null}
+                <p className="text-xs text-neutral-400">
+                  Freighter will ask you to confirm the active wallet on every connect.
+                  {getExpectedWalletNetworkLabel() !== "any Stellar network"
+                    ? ` Expected network: ${getExpectedWalletNetworkLabel()}.`
+                    : ""}
+                </p>
               </section>
             </aside>
           </div>

@@ -5,7 +5,10 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import type { VendorProfileData, VendorProfilePayload } from "./types";
 import StatCard from "./StatCard";
-import { requestAccess } from "@stellar/freighter-api";
+import {
+  connectFreighterWallet,
+  getExpectedWalletNetworkLabel,
+} from "@/lib/freighter-wallet";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -208,14 +211,7 @@ export default function VendorProfile() {
     }
 
     try {
-      const access = await requestAccess();
-      if (access.error) {
-        throw new Error(access.error.message ?? "Failed to request access.");
-      }
-
-      if (!access.address) {
-        throw new Error("Failed to retrieve wallet address from Freighter.");
-      }
+      const access = await connectFreighterWallet();
 
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
@@ -410,12 +406,18 @@ export default function VendorProfile() {
                    {connectingWallet ? "Connecting..." : "Connect Wallet"}
                  </button>
                )}
-               {walletError ? (
-                 <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
-                   {walletError}
-                 </div>
-               ) : null}
-             </div>
+              {walletError ? (
+                <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
+                  {walletError}
+                </div>
+              ) : null}
+              <p className="mt-2 text-xs text-neutral-400">
+                Freighter will re-confirm the active wallet every time you connect.
+                {getExpectedWalletNetworkLabel() !== "any Stellar network"
+                  ? ` Expected network: ${getExpectedWalletNetworkLabel()}.`
+                  : ""}
+              </p>
+            </div>
 
             {/* Completion indicator */}
             {profile && (
