@@ -40,14 +40,14 @@ DATABASE_URL="postgresql://user:password@host:5432/db"
 JWT_SECRET="your-secret"
 OLLAMA_BASE_URL="http://localhost:11434"
 OLLAMA_MODEL="gemma4:31b-cloud"
-NEXT_PUBLIC_STELLAR_NETWORK="auto"
+NEXT_PUBLIC_STELLAR_NETWORK="testnet"
 ```
 
 Notes:
 - DATABASE_URL is required for Prisma.
 - JWT_SECRET is required for auth tokens.
 - OLLAMA_* are used by the diagnose endpoint (defaults are shown above).
-- NEXT_PUBLIC_STELLAR_NETWORK controls which Freighter network the wallet connect flow accepts. Use `auto` to accept the active Freighter network, or set `mainnet`, `testnet`, `futurenet`, or `standalone`.
+- NEXT_PUBLIC_STELLAR_NETWORK controls which Freighter network the wallet connect flow accepts. The app now defaults to `testnet` if this variable is not set. You can still override it with `mainnet`, `testnet`, `futurenet`, or `standalone` if you need to, but local testing should stay on testnet.
 
 ## Project Structure
 
