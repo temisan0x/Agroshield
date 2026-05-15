@@ -19,15 +19,44 @@ const fallbackAvatar = (
   </svg>
 );
 
+type UserRole = "FARMER" | "VENDOR" | null;
+
 function Nav() {
   const router = useRouter();
   const isAuthed = useAuthStatus();
   const hydrated = useHydrated();
   const pathname = usePathname();
+  const [role, setRole] = useState<UserRole>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  // Merge both menu states and refs
+  const [menuOpen, setMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) {
+        queueMicrotask(() => {
+          setRole(null);
+        });
+        return;
+      }
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      queueMicrotask(() => {
+        setRole(payload?.role ?? null);
+      });
+    } catch (error) {
+      console.error("[NAV_AUTH_PARSE]", error);
+      localStorage.removeItem("agroshield_token");
+      queueMicrotask(() => {
+        setRole(null);
+      });
+    }
+  }, [hydrated]);
 
   useEffect(() => {
     let active = true;
@@ -53,9 +82,7 @@ function Nav() {
         };
 
         if (active) {
-          setProfileImage(
-            response.ok ? data.profile?.user?.profileImage ?? null : null
-          );
+          setProfileImage(response.ok ? data.profile?.user?.profileImage ?? null : null);
         }
       } catch {
         if (active) setProfileImage(null);
@@ -69,41 +96,72 @@ function Nav() {
     };
   }, [hydrated, isAuthed]);
 
+<<<<<<< HEAD
+  const profileRoute = role === "VENDOR" ? "/vendor/profile" : "/farmer/profile";
+
   useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
-      if (!isProfileMenuOpen) return;
-      const menu = profileMenuRef.current;
-      const button = profileButtonRef.current;
+    // Merge both menu open effects
+    function handlePointerDown(event: MouseEvent | PointerEvent) {
       const target = event.target as Node;
-
-      if (menu?.contains(target) || button?.contains(target)) {
-        return;
+      // Handle old menu
+      if (menuOpen) {
+        const clickedInsideMenu = menuRef.current?.contains(target);
+        const clickedProfileButton = profileButtonRef.current?.contains(target);
+        if (!clickedInsideMenu && !clickedProfileButton) {
+          setMenuOpen(false);
+        }
       }
-
-      setIsProfileMenuOpen(false);
+      // Handle new menu
+      if (isProfileMenuOpen) {
+        const menu = profileMenuRef.current;
+        const button = profileButtonRef.current;
+        if (!(menu?.contains(target) || button?.contains(target))) {
+          setIsProfileMenuOpen(false);
+        }
+      }
     }
-
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        setMenuOpen(false);
         setIsProfileMenuOpen(false);
       }
     }
-
+    window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("mousedown", handlePointerDown);
     window.addEventListener("keydown", handleEscape);
-
     return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [isProfileMenuOpen]);
+  }, [menuOpen, isProfileMenuOpen]);
 
-  const handleSignOut = () => {
-    localStorage.removeItem("agroshield_token");
-    setIsProfileMenuOpen(false);
-    notifyAuthChange();
-    router.replace("/login");
-    router.refresh();
+  // Merge both sign out flows
+  const handleSignOut = async () => {
+    const token = localStorage.getItem("agroshield_token");
+    try {
+      if (token) {
+        await fetch("/api/profile/wallet", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ walletAddress: null }),
+        });
+      }
+    } catch {
+      // Best effort only. Logout must still complete.
+    } finally {
+      localStorage.removeItem("agroshield_token");
+      setMenuOpen(false);
+      setIsProfileMenuOpen(false);
+      setRole(null);
+      setProfileImage(null);
+      notifyAuthChange();
+      router.replace("/login");
+      router.refresh();
+    }
   };
 
   return (
@@ -117,6 +175,7 @@ function Nav() {
             <span className="h-3 w-3 rounded-sm bg-[#16a34a]" />
             <span className="font-semibold tracking-wide">AgroShield</span>
           </Link>
+
           <div className="hidden items-center gap-6 text-sm text-neutral-300 md:flex">
             <Link
               className={`transition hover:text-white ${pathname === "/marketplace" ? "text-white" : ""}`}
@@ -130,35 +189,63 @@ function Nav() {
             >
               Diagnose
             </Link>
+
+            {hydrated && isAuthed && role === "VENDOR" ? (
+              <>
+                <Link
+                  href="/vendor/cases"
+                  className={`transition hover:text-white ${pathname === "/vendor/cases" ? "text-white" : ""}`}
+                >
+                  Browse Cases
+                </Link>
+                <Link
+                  href="/vendor/bids"
+                  className={`transition hover:text-white ${pathname === "/vendor/bids" ? "text-white" : ""}`}
+                >
+                  My Bids
+                </Link>
+              </>
+            ) : null}
+
+            {hydrated && isAuthed && role === "FARMER" ? (
+              <Link
+                href="/farmer/cases"
+                className={`transition hover:text-white ${pathname === "/farmer/cases" ? "text-white" : ""}`}
+              >
+                My Cases
+              </Link>
+            ) : null}
+
             {hydrated && isAuthed ? (
               <Link
-                className={`transition hover:text-white ${pathname === "/profile" ? "text-white" : ""}`}
-                href="/profile"
+                className={`transition hover:text-white ${pathname === profileRoute ? "text-white" : ""}`}
+                href={profileRoute}
               >
                 Profile
               </Link>
             ) : null}
+
             {hydrated && !isAuthed ? (
               <Link className="transition hover:text-white" href="/login">
                 Log in
               </Link>
             ) : null}
           </div>
-          {hydrated && !isAuthed ? (
-            <Link className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-neutral-900" href="/signup">
-              Get started
-            </Link>
-          ) : null}
+
           {hydrated && isAuthed ? (
-            <div className="relative flex items-center gap-3 text-sm text-neutral-100">
+            <div className="relative flex items-center gap-3 text-sm text-neutral-100" ref={menuRef}>
               <button
                 ref={profileButtonRef}
                 type="button"
                 className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-white/10 transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/40"
                 aria-label="Open profile menu"
                 aria-haspopup="menu"
-                aria-expanded={isProfileMenuOpen}
-                onClick={() => setIsProfileMenuOpen((current) => !current)}
+                aria-expanded={isProfileMenuOpen || menuOpen}
+                onClick={() => {
+                  setIsProfileMenuOpen((current) => !current);
+                  setMenuOpen((value) => !value);
+                }}
+                title="Open profile menu"
               >
                 {profileImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -172,6 +259,50 @@ function Nav() {
                 )}
               </button>
 
+              {/* Render both menus for compatibility, only one will show at a time */}
+              {menuOpen ? (
+                <div className="absolute right-0 top-12 w-56 overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 py-2 text-sm text-neutral-200 shadow-xl">
+                  <Link
+                    href={profileRoute}
+                    className="block px-4 py-2 transition hover:bg-white/5"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    View profile
+                  </Link>
+                  {role === "VENDOR" ? (
+                    <Link
+                      href="/vendor/bids"
+                      className="block px-4 py-2 transition hover:bg-white/5"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      My bids
+                    </Link>
+                  ) : null}
+                  {role === "FARMER" ? (
+                    <Link
+                      href="/farmer/cases"
+                      className="block px-4 py-2 transition hover:bg-white/5"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      My cases
+                    </Link>
+                  ) : null}
+                  <Link
+                    href="/settings"
+                    className="block px-4 py-2 transition hover:bg-white/5"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Settings
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="block w-full px-4 py-2 text-left text-red-400 transition hover:bg-red-500/10"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
               {isProfileMenuOpen ? (
                 <div
                   ref={profileMenuRef}
@@ -198,7 +329,16 @@ function Nav() {
                 </div>
               ) : null}
             </div>
-          ) : null}
+          ) : hydrated && !isAuthed ? (
+            <Link
+              href="/signup"
+              className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-neutral-900"
+            >
+              Get started
+            </Link>
+          ) : (
+            <div className="h-9 w-9" />
+          )}
         </div>
       </div>
     </nav>

@@ -54,6 +54,7 @@ export interface CaseDetailData {
   diagnosis: Diagnosis | null;
   status: string;
   createdAt: string;
+  assignedVendorId?: string | null;
   farmer: { id: string; email: string; walletAddress: string | null };
   bids: BidOnCase[];
   escrow: EscrowData | null;
@@ -126,4 +127,4 @@ export interface Dispute {
   status: "OPEN" | "RESOLVED"
   resolvedBy?: string | null
   createdAt: string
-}
+}

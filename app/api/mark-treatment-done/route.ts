@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { changeMilestoneStatus } from "@/lib/trustlesswork";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,45 +14,60 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { caseId, contractId } = body ?? {};
+    const { caseId, contractId, milestoneIndex } = body ?? {};
 
-    if (!caseId || !contractId) {
-      return NextResponse.json({ error: "caseId and contractId are required" }, { status: 400 });
+    if (!caseId || !contractId || milestoneIndex !== 0) {
+      return NextResponse.json(
+        { error: "caseId, contractId, and milestoneIndex: 0 are required" },
+        { status: 400 },
+      );
     }
 
-    const bid = await prisma.bid.findFirst({
-      where: {
-        caseId,
-        vendorId: user.id,
-        selected: true,
+    const foundCase = await prisma.case.findUnique({
+      where: { id: caseId },
+      include: {
+        escrow: true,
+        bids: {
+          where: { selected: true },
+          select: { vendorId: true },
+          take: 1,
+        },
       },
     });
 
-    if (!bid) {
-      return NextResponse.json({ error: "No selected bid for this vendor" }, { status: 403 });
+    if (!foundCase) {
+      return NextResponse.json({ error: "Case not found" }, { status: 404 });
     }
 
-    const vendor = await prisma.user.findUnique({ where: { id: user.id } });
-    if (!vendor?.walletAddress) {
-      return NextResponse.json({ error: "Missing vendor wallet address" }, { status: 400 });
+    const assignedVendorId = foundCase.bids[0]?.vendorId ?? null;
+    if (assignedVendorId !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    let response: { unsignedTransaction?: string } = {};
-    try {
-      response = await changeMilestoneStatus({
-        contractId,
-        milestoneIndex: "0",
-        newStatus: "completed",
-        serviceProvider: vendor.walletAddress,
-      });
-    } catch (error) {
-      console.error("[TREATMENT_DONE_TW]", error);
-      response = { unsignedTransaction: "DEMO_XDR_UNSIGNED" };
+    if (foundCase.status !== "IN_PROGRESS") {
+      return NextResponse.json(
+        { error: "Only in-progress cases can be marked delivered" },
+        { status: 400 },
+      );
     }
+
+    if (foundCase.escrow?.contractId !== contractId) {
+      return NextResponse.json({ error: "Escrow contract mismatch" }, { status: 400 });
+    }
+
+    const updatedCase = await prisma.case.update({
+      where: { id: caseId },
+      data: { status: "DELIVERED" },
+      select: { id: true, status: true },
+    });
 
     return NextResponse.json({
-      success: true,
-      unsignedTransaction: response.unsignedTransaction ?? "DEMO_XDR_UNSIGNED",
+      message: "Treatment marked as delivered",
+      case: {
+        id: updatedCase.id,
+        status: updatedCase.status,
+        updatedAt: new Date().toISOString(),
+      },
     });
   } catch (error) {
     console.error("[TREATMENT_DONE]", error);

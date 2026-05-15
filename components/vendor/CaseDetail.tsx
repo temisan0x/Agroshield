@@ -8,6 +8,7 @@ import BidModal from "./BidModal";
 import BidRow from "./BidRow";
 import { signTransaction, isConnected } from "@stellar/freighter-api";
 import RaiseDisputeButton from "../dispute/RaiseDisputeButton";
+import { MarkTreatmentDoneButton } from "./MarkTreatmentDoneButton";
 
 interface CaseDetailProps {
   id: string;
@@ -17,6 +18,7 @@ interface CaseDetailProps {
 export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProps) {
   const reduceMotion = useReducedMotion();
   const [caseData, setCaseData] = useState<CaseDetailData | null>(null);
+  const [caseStatus, setCaseStatus] = useState<string | null>(null); // ← null until data arrives
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bidOpen, setBidOpen] = useState(false);
@@ -33,7 +35,10 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
       const res = await fetch(`/api/cases/${id}`);
       if (!res.ok) throw new Error("Failed to load case");
       const data = await res.json();
-      setCaseData(data.case ?? null);
+      const fetched: CaseDetailData | null = data.case ?? null;
+      setCaseData(fetched);
+      // ← Sync caseStatus every time we (re)fetch — including the initial load
+      if (fetched) setCaseStatus(fetched.status);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -42,19 +47,16 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   }, [id]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchCase();
+    queueMicrotask(() => {
+      void fetchCase();
+    });
   }, [fetchCase]);
 
-  // Fetch user profile to check wallet status
   useEffect(() => {
     async function checkWallet() {
       try {
         const token = localStorage.getItem("agroshield_token");
-        if (!token) {
-          setWalletChecking(false);
-          return;
-        }
+        if (!token) { setWalletChecking(false); return; }
         const res = await fetch("/api/profile/summary", {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -63,7 +65,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
           setUserWalletAddress(data?.profile?.user?.walletAddress ?? null);
         }
       } catch {
-        // Ignore errors - wallet address just won't show
+        // Ignore — wallet address just won't show
       } finally {
         setWalletChecking(false);
       }
@@ -109,14 +111,16 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
     );
   }
 
-  if (error || !caseData) {
+  if (error || !caseData || caseStatus === null) {
     return (
       <div className="mx-auto max-w-md py-32 text-center">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-8">
           <p className="text-sm font-semibold text-red-700">Error</p>
           <p className="mt-1 text-xs text-red-500">{error ?? "Case not found"}</p>
-          <button onClick={() => { setError(null); setLoading(true); fetchCase(); }}
-            className="mt-4 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800">
+          <button
+            onClick={() => { setError(null); setLoading(true); fetchCase(); }}
+            className="mt-4 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+          >
             Retry
           </button>
         </div>
@@ -148,21 +152,19 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
 
     try {
       const token = localStorage.getItem("agroshield_token");
-      if (!token) {
-        throw new Error("Please log in again to continue.");
-      }
+      if (!token) throw new Error("Please log in again to continue.");
 
+      const { isConnected, signTransaction } = await import("@stellar/freighter-api");
       const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
-      if (!freighterReady.isConnected) {
+      const walletConnected =
+        typeof freighterReady === "boolean" ? freighterReady : freighterReady.isConnected;
+      if (!walletConnected) {
         throw new Error("Connect Freighter before accepting this bid.");
       }
 
       const createRes = await fetch("/api/escrow/create", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ caseId: caseData.id, bidId: bid.id }),
       });
 
@@ -235,8 +237,11 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
         throw new Error("Please log in again to continue.");
       }
 
+      const { isConnected, signTransaction } = await import("@stellar/freighter-api");
       const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
-      if (!freighterReady.isConnected) {
+      const walletConnected =
+        typeof freighterReady === "boolean" ? freighterReady : freighterReady.isConnected;
+      if (!walletConnected) {
         throw new Error("Connect Freighter before funding the escrow.");
       }
 
@@ -254,7 +259,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
         error?: string;
       };
 
-      if (!fundRes.ok || !fundData.unsignedTransaction) {
+      if (! fundRes.ok || !fundData.unsignedTransaction) {
         throw new Error(fundData.error ?? "Failed to create funding transaction.");
       }
 
@@ -313,7 +318,9 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
 
       // Check Freighter
       const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
-      if (!freighterReady.isConnected) {
+      const walletConnected =
+        typeof freighterReady === "boolean" ? freighterReady : freighterReady.isConnected;
+      if (!walletConnected) {
         throw new Error("Please install or enable Freighter wallet to continue.");
       }
 
@@ -334,7 +341,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
       });
 
       if (typeof signedXdr === "object" && "error" in signedXdr) {
-        throw new Error(signedXdr.error.message || "Transaction was rejected in Freighter");
+        throw new Error((signedXdr as any).error.message || "Transaction was rejected in Freighter");
       }
 
       const signedTxXdr =
@@ -358,6 +365,13 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
       setReleasingFunds(false);
     }
   };
+
+  const statusLabel = caseStatus.replace(/_/g, " ");
+  const isOpen = caseStatus === "OPEN";
+  const assignedVendorId =
+    caseData.assignedVendorId ??
+    caseData.bids.find((bid) => bid.selected)?.vendorId ??
+    null;
 
   return (
     <div>
@@ -384,7 +398,6 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
         </div>
       )}
 
-      {/* Warning banner if viewer wallet not connected */}
       {!walletChecking && !userWalletAddress ? (
         <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-start gap-3">
@@ -411,14 +424,15 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
           <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-neutral-100">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={caseData.imageUrl} alt={disease} className="h-full w-full object-cover" />
+            {/* ← Reads from caseStatus so it updates after mark-done */}
             <span
               className={`absolute left-4 top-4 rounded-full border px-3 py-1 text-xs font-medium ${
-                caseData.status === "OPEN"
+                isOpen
                   ? "bg-blue-50 text-blue-600 border-blue-100"
                   : "bg-yellow-50 text-yellow-700 border-yellow-100"
               }`}
             >
-              {caseData.status === "OPEN" ? "Open" : caseData.status.replace("_", " ")}
+              {isOpen ? "Open" : statusLabel}
             </span>
           </div>
 
@@ -464,6 +478,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
           </div>
         </div>
 
+        {/* ─── Sidebar ─────────────────────────────────────────────────── */}
         <div className="lg:sticky lg:top-6">
           <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
             <div className="flex flex-wrap gap-2">
@@ -478,14 +493,15 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
               >
                 {String(caseData.diagnosis?.urgency ?? "MEDIUM").toUpperCase()}
               </span>
+              {/* ← Also reads from caseStatus */}
               <span
                 className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                  caseData.status === "OPEN"
+                  isOpen
                     ? "bg-blue-50 text-blue-600 border-blue-100"
                     : "bg-yellow-50 text-yellow-700 border-yellow-100"
                 }`}
               >
-                {caseData.status === "OPEN" ? "Open" : caseData.status.replace("_", " ")}
+                {isOpen ? "Open" : statusLabel}
               </span>
             </div>
 
@@ -496,7 +512,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
               Submit your proposal with pricing and delivery time.
             </p>
 
-            {caseData.status === "OPEN" && viewerRole === "VENDOR" ? (
+            {isOpen && viewerRole === "VENDOR" ? (
               <button
                 type="button"
                 onClick={() => setBidOpen(true)}
@@ -509,6 +525,16 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
                 This case is not accepting new bids.
               </div>
             )}
+
+            {/* ─── Mark Treatment Done — only renders when conditions are met ── */}
+            <div className="mt-3">
+              <MarkTreatmentDoneButton
+                caseId={caseData.id}
+                assignedVendorId={assignedVendorId}
+                currentStatus={caseStatus}
+                onSuccess={(newStatus) => setCaseStatus(newStatus)}
+              />
+            </div>
 
             <div className="my-5 border-t border-neutral-100" />
 
@@ -577,6 +603,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
         </div>
       </motion.div>
 
+      {/* ─── Bids list ───────────────────────────────────────────────────── */}
       <div className="mt-10">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-[family-name:var(--font-manrope)] text-xl font-bold text-neutral-900">
@@ -602,7 +629,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
                     status={status}
                     index={i}
                     action={
-                      viewerRole === "FARMER" && caseData.status === "OPEN" && !bid.selected ? (
+                      viewerRole === "FARMER" && isOpen && !bid.selected ? (
                         <button
                           type="button"
                           onClick={() => handleAcceptBid(bid)}

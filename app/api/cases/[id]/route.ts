@@ -37,6 +37,7 @@ export async function GET(
     const formatted = {
       ...found,
       diagnosis: parseDiagnosis(found.diagnosis),
+      assignedVendorId: found.bids.find((bid) => bid.selected)?.vendorId ?? null,
     };
 
     return NextResponse.json({ success: true, case: formatted });
