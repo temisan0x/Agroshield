@@ -9,6 +9,7 @@ import {
   connectFreighterWallet,
   getExpectedWalletNetworkLabel,
 } from "@/lib/freighter-wallet";
+import { ProfileSkeleton } from "./Skeleton";
 
 type ProfileItem = {
   id: string;
@@ -139,38 +140,9 @@ function fileToDataUrl(file: File) {
 }
 
 
+
 function LoadingShell() {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_30px_80px_-60px_rgba(0,0,0,0.5)]"
-    >
-      <div className="animate-pulse space-y-8 p-6 sm:p-8 lg:p-10">
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-4">
-            <div className="h-6 w-28 rounded-full bg-neutral-100" />
-            <div className="h-12 w-full rounded-2xl bg-neutral-100" />
-            <div className="h-5 w-4/5 rounded-full bg-neutral-100" />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-24 rounded-2xl bg-neutral-100" />
-            ))}
-          </div>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-28 rounded-2xl bg-neutral-100" />
-          ))}
-        </div>
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="h-80 rounded-3xl bg-neutral-100" />
-          <div className="h-80 rounded-3xl bg-neutral-100" />
-        </div>
-      </div>
-    </motion.div>
-  );
+  return <ProfileSkeleton />;
 }
 
 export default function ProfileDashboard() {
@@ -516,8 +488,8 @@ export default function ProfileDashboard() {
 
   if (state.status === "loading") {
     return (
-      <main className="pt-28 pb-24">
-        <div className="mx-auto max-w-6xl px-6">
+      <main className="pt-20 pb-16">
+        <div className="mx-auto max-w-4xl px-6">
           <LoadingShell />
         </div>
       </main>
@@ -624,8 +596,8 @@ export default function ProfileDashboard() {
   );
 
   return (
-    <main className="pt-28 pb-24">
-      <div className="mx-auto max-w-6xl px-6">
+    <main className="pt-20 pb-16">
+      <div className="mx-auto max-w-4xl px-6">
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
