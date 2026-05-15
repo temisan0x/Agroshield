@@ -10,7 +10,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
-import type { VendorProfileData, VendorProfilePayload } from "@/app/vendor/profile/types";
+import type { VendorProfileData, VendorProfilePayload } from "./types";
 import {
   connectFreighterWallet,
   getExpectedWalletNetworkLabel,

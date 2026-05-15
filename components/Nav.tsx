@@ -93,7 +93,7 @@ function Nav() {
     };
   }, [hydrated, isAuthed]);
 
-  const profileRoute = role === "VENDOR" ? "/vendor/profile" : "/farmer/profile";
+  const profileRoute = "/profile";
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent | PointerEvent) {
