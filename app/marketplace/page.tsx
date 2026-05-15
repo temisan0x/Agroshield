@@ -97,19 +97,45 @@ export default function MarketplacePage() {
     setLoading(true);
     setError(null);
     try {
-      let resolvedUser: UserSummary | null = null;
-      if (hydrated && isAuthed) {
-        resolvedUser = await fetchUser();
-      } else {
-        setUser(null);
-      }
+      const token = localStorage.getItem("agroshield_token");
+      
+      // Parallelize fetches
+      const [casesRes, userRes] = await Promise.all([
+        fetch("/api/cases"),
+        hydrated && isAuthed 
+          ? fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
+          : Promise.resolve(null)
+      ]);
 
-      await fetchCases();
+      if (!casesRes.ok) throw new Error("Failed to load marketplace cases");
+      const casesData = await casesRes.json();
+      const fetchedCases = casesData.cases ?? [];
+      setCases(fetchedCases);
+
+      let resolvedUser: UserSummary | null = null;
+      if (userRes && userRes.ok) {
+        const userData = await userRes.json();
+        resolvedUser = userData.user;
+        setUser(resolvedUser);
+      }
 
       if (resolvedUser?.role === "VENDOR") {
-        await fetchVendorStats();
+        // Fetch only profile summary, use already fetched cases for stats
+        const profileRes = await fetch("/api/profile/summary", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (profileRes.ok) {
+          const profilePayload = await profileRes.json();
+          const stats = profilePayload.profile.stats ?? [];
+          const openCases = fetchedCases.filter((entry: any) => entry.status === "OPEN").length;
+          const activeBids = Number(stats.find((s: any) => s.label === "Bids placed")?.value ?? 0);
+          const wonCases = Number(stats.find((s: any) => s.label === "Selected wins")?.value ?? 0);
+          setVendorStats({ openCases, activeBids, wonCases });
+        }
       }
     } catch (err) {
+      console.error("[MARKETPLACE_LOAD]", err);
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
@@ -326,7 +352,7 @@ export default function MarketplacePage() {
               <StatCard label="Response Time" value="< 24h" helper="avg vendor reply" delay={0.15} />
             </div>
 
-            <MarketplaceFeed />
+            <MarketplaceFeed initialCases={cases} />
           </div>
         )}
       </motion.main>

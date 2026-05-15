@@ -8,12 +8,15 @@ import CaseCard from "./CaseCard";
 import BidModal from "./BidModal";
 
 type QuickFilter = "all" | "high" | "near";
+interface MarketplaceFeedProps {
+  initialCases?: CaseListItem[];
+}
 
-export default function MarketplaceFeed() {
+export default function MarketplaceFeed({ initialCases }: MarketplaceFeedProps) {
   const reduceMotion = useReducedMotion();
   const router = useRouter();
-  const [cases, setCases] = useState<CaseListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cases, setCases] = useState<CaseListItem[]>(initialCases ?? []);
+  const [loading, setLoading] = useState(!initialCases);
   const [error, setError] = useState<string | null>(null);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [search, setSearch] = useState("");

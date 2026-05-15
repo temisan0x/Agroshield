@@ -138,18 +138,6 @@ function fileToDataUrl(file: File) {
   });
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error("Wallet connection timed out. Please try again."));
-    }, timeoutMs);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timeoutId) clearTimeout(timeoutId);
-  });
-}
 
 function LoadingShell() {
   return (
@@ -383,7 +371,7 @@ export default function ProfileDashboard() {
     }
 
     try {
-      const access = await withTimeout(connectFreighterWallet(), 45000);
+      const access = await connectFreighterWallet();
 
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",

@@ -45,7 +45,7 @@ function Nav() {
       }
 
       try {
-        const response = await fetch("/api/profile/summary", {
+        const response = await fetch("/api/profile/summary?minimal=true", {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = (await response.json().catch(() => ({}))) as {
@@ -118,15 +118,6 @@ function Nav() {
             <span className="font-semibold tracking-wide">AgroShield</span>
           </Link>
           <div className="hidden items-center gap-6 text-sm text-neutral-300 md:flex">
-            <Link className="transition hover:text-white" href="/#how">
-              How it works
-            </Link>
-            <Link className="transition hover:text-white" href="/#farmers">
-              For Farmers
-            </Link>
-            <Link className="transition hover:text-white" href="/#vendors">
-              For Vendors
-            </Link>
             <Link
               className={`transition hover:text-white ${pathname === "/marketplace" ? "text-white" : ""}`}
               href="/marketplace"

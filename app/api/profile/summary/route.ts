@@ -75,6 +75,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const minimal = searchParams.get("minimal") === "true";
+
     const baseUser = {
       id: user.id,
       email: user.email,
@@ -85,10 +88,18 @@ export async function GET(request: NextRequest) {
       createdAt: user.createdAt.toISOString(),
     };
 
+    if (minimal) {
+      return NextResponse.json({ success: true, profile: { user: baseUser } });
+    }
+
     if (user.role === "FARMER") {
       const cases = await prisma.case.findMany({
         where: { farmerId: user.id },
-        include: {
+        select: {
+          id: true,
+          diagnosis: true,
+          status: true,
+          createdAt: true,
           _count: { select: { bids: true } },
           bids: {
             select: { amount: true, selected: true, createdAt: true },
@@ -99,13 +110,13 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: "desc" },
       });
 
-      const totalBids = cases.reduce((sum: number, entry: FarmerCaseEntry) => sum + entry._count.bids, 0);
+      const totalBids = cases.reduce((sum: number, entry: any) => sum + entry._count.bids, 0);
       const activeCases = cases.filter(
-        (entry: FarmerCaseEntry) => entry.status === "OPEN" || entry.status === "IN_PROGRESS"
+        (entry: any) => entry.status === "OPEN" || entry.status === "IN_PROGRESS"
       ).length;
-      const openCases = cases.filter((entry: FarmerCaseEntry) => entry.status === "OPEN").length;
+      const openCases = cases.filter((entry: any) => entry.status === "OPEN").length;
 
-      const items = cases.map((entry: FarmerCaseEntry) => {
+      const items = cases.map((entry: any) => {
         const diagnosis = parseDiagnosis(entry.diagnosis);
         const latestBid = entry.bids[0];
 
@@ -124,7 +135,7 @@ export async function GET(request: NextRequest) {
         };
       });
 
-      const activity = cases.slice(0, 4).map((entry: FarmerCaseEntry) => {
+      const activity = cases.slice(0, 4).map((entry: any) => {
         const diagnosis = parseDiagnosis(entry.diagnosis);
         const latestBid = entry.bids[0];
 
@@ -178,7 +189,13 @@ export async function GET(request: NextRequest) {
 
     const bids = await prisma.bid.findMany({
       where: { vendorId: user.id },
-      include: {
+      select: {
+        id: true,
+        caseId: true,
+        selected: true,
+        amount: true,
+        proposal: true,
+        createdAt: true,
         case: {
           select: {
             id: true,
@@ -192,14 +209,14 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    const selectedWins = bids.filter((entry: VendorBidEntry) => entry.selected).length;
-    const distinctCases = new Set(bids.map((entry: VendorBidEntry) => entry.caseId)).size;
+    const selectedWins = bids.filter((entry: any) => entry.selected).length;
+    const distinctCases = new Set(bids.map((entry: any) => entry.caseId)).size;
     const averageBid =
       bids.length > 0
-        ? bids.reduce((sum: number, entry: VendorBidEntry) => sum + Number(entry.amount.toString()), 0) / bids.length
+        ? bids.reduce((sum: number, entry: any) => sum + Number(entry.amount.toString()), 0) / bids.length
         : 0;
 
-    const items = bids.map((entry: VendorBidEntry) => {
+    const items = bids.map((entry: any) => {
       const diagnosis = parseDiagnosis(entry.case.diagnosis);
 
       return {
@@ -217,7 +234,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const activity = bids.slice(0, 4).map((entry: VendorBidEntry) => {
+    const activity = bids.slice(0, 4).map((entry: any) => {
       const diagnosis = parseDiagnosis(entry.case.diagnosis);
 
       return {

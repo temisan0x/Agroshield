@@ -118,3 +118,12 @@ export const STATUS_STYLES: Record<BidStatus, { bg: string; text: string; dot: s
   ACCEPTED: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-400", label: "Accepted" },
   REJECTED: { bg: "bg-red-50",     text: "text-red-600",     dot: "bg-red-400",     label: "Rejected" },
 };
+
+export interface Dispute {
+  id: string
+  caseId: string
+  reason: string
+  status: "OPEN" | "RESOLVED"
+  resolvedBy?: string | null
+  createdAt: string
+}

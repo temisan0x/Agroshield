@@ -7,6 +7,7 @@ import { deriveBidStatus } from "./types";
 import BidModal from "./BidModal";
 import BidRow from "./BidRow";
 import { signTransaction, isConnected } from "@stellar/freighter-api";
+import RaiseDisputeButton from "../dispute/RaiseDisputeButton";
 
 interface CaseDetailProps {
   id: string;
@@ -25,6 +26,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   const [escrowNotice, setEscrowNotice] = useState<string | null>(null);
   const [userWalletAddress, setUserWalletAddress] = useState<string | null>(null);
   const [walletChecking, setWalletChecking] = useState(true);
+  const [releasingFunds, setReleasingFunds] = useState(false);
 
   const fetchCase = useCallback(async () => {
     try {
@@ -71,8 +73,38 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
+      <div className="mx-auto w-full max-w-5xl animate-pulse py-10">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
+          <div>
+            <div className="aspect-[4/3] rounded-2xl bg-neutral-100" />
+            <div className="mt-6 space-y-4">
+              <div className="h-4 w-24 rounded-full bg-neutral-100" />
+              <div className="h-10 w-3/4 rounded-2xl bg-neutral-100" />
+              <div className="h-4 w-1/2 rounded-full bg-neutral-100" />
+              <div className="grid gap-3 pt-4 sm:grid-cols-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-20 rounded-xl bg-neutral-100" />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-neutral-100 bg-white p-6 shadow-sm">
+              <div className="flex gap-2">
+                <div className="h-6 w-16 rounded-full bg-neutral-100" />
+                <div className="h-6 w-16 rounded-full bg-neutral-100" />
+              </div>
+              <div className="mt-4 h-6 w-1/2 rounded-full bg-neutral-100" />
+              <div className="mt-2 h-4 w-full rounded-full bg-neutral-100" />
+              <div className="mt-5 h-12 w-full rounded-xl bg-neutral-100" />
+              <div className="my-5 border-t border-neutral-100" />
+              <div className="space-y-3">
+                <div className="h-4 w-full rounded-full bg-neutral-100" />
+                <div className="h-4 w-full rounded-full bg-neutral-100" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -268,8 +300,90 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
     }
   };
 
+
+  const handleReleasePayment = async () => {
+    if (!caseData.escrow) return;
+    setEscrowError(null);
+    setEscrowNotice(null);
+    setReleasingFunds(true);
+
+    try {
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) throw new Error("Please log in again to continue.");
+
+      // Check Freighter
+      const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
+      if (!freighterReady.isConnected) {
+        throw new Error("Please install or enable Freighter wallet to continue.");
+      }
+
+      const res = await fetch("/api/escrow/release", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ escrowId: caseData.escrow.id }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to initiate release");
+
+      const signedXdr = await signTransaction(data.unsignedTransaction, {
+        networkPassphrase: "Test SDF Network ; September 2015",
+      });
+
+      if (typeof signedXdr === "object" && "error" in signedXdr) {
+        throw new Error(signedXdr.error.message || "Transaction was rejected in Freighter");
+      }
+
+      const signedTxXdr =
+        typeof signedXdr === "string"
+          ? signedXdr
+          : (signedXdr as any).signedTxXdr || (signedXdr as any).signedTransaction;
+
+      const sendRes = await fetch("https://dev.api.trustlesswork.com/helper/send-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signedXdr: signedTxXdr }),
+      });
+
+      if (!sendRes.ok) throw new Error("Failed to send release transaction");
+
+      setEscrowNotice("Payment released successfully.");
+      await fetchCase();
+    } catch (err) {
+      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setReleasingFunds(false);
+    }
+  };
+
   return (
     <div>
+      {/* Dispute Banners */}
+      {caseData.status === "DISPUTED" && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-3 mb-6">
+          <div className="text-yellow-600 mt-0.5 text-lg">⚠️</div>
+          <div>
+            <p className="text-sm font-semibold text-yellow-800">Dispute in Progress</p>
+            <p className="text-xs text-yellow-700 mt-0.5">
+              The farmer has raised a dispute on this case. Our team is reviewing it and will resolve
+              within 48 hours.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {caseData.status === "RESOLVED" && caseData.dispute && (
+        <div className="bg-green-50 border border-green-100 rounded-xl p-4 flex items-start gap-3 mb-6">
+          <div className="text-green-600 mt-0.5 text-lg">✅</div>
+          <div>
+            <p className="text-sm font-semibold text-green-800">Dispute Resolved</p>
+          </div>
+        </div>
+      )}
+
       {/* Warning banner if viewer wallet not connected */}
       {!walletChecking && !userWalletAddress ? (
         <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -431,6 +545,32 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
                 >
                   {fundingEscrow ? "Funding..." : "Fund Escrow"}
                 </button>
+              </div>
+            ) : null}
+
+            {viewerRole === "FARMER" &&
+            (caseData.status === "IN_PROGRESS" || caseData.status === "DELIVERED") ? (
+              <div className="mt-5 flex flex-col gap-3">
+                <button
+                  onClick={handleReleasePayment}
+                  disabled={releasingFunds}
+                  className="w-full rounded-full bg-neutral-900 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  {releasingFunds ? "Processing..." : "Confirm & Release Payment"}
+                </button>
+
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-neutral-100" />
+                  <span className="text-xs text-neutral-400">or</span>
+                  <div className="h-px flex-1 bg-neutral-100" />
+                </div>
+
+                <RaiseDisputeButton
+                  caseId={caseData.id}
+                  escrowContractId={caseData.escrow?.contractId || ""}
+                  farmerWalletAddress={caseData.farmer.walletAddress || ""}
+                  onDisputeRaised={() => fetchCase()}
+                />
               </div>
             ) : null}
           </div>
