@@ -11,12 +11,11 @@ import {
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import type { VendorProfileData, VendorProfilePayload } from "@/app/vendor/profile/types";
-import { connectFreighterWallet } from "@/lib/freighter-wallet";
-import StatCard from "./StatCard";
 import {
   connectFreighterWallet,
   getExpectedWalletNetworkLabel,
 } from "@/lib/freighter-wallet";
+import StatCard from "./StatCard";
 
 type ProfileFieldValue = VendorProfilePayload[keyof VendorProfilePayload];
 
@@ -239,21 +238,9 @@ export default function VendorProfile() {
     }
 
     try {
-      // Try both connection methods for compatibility
-      let address: string | null = null;
-      try {
-        const { requestAccess, getAddress } = await import("@stellar/freighter-api");
-        const access = await requestAccess();
-        if (access.error) {
-          throw new Error(access.error.message ?? "Failed to request access.");
-        }
-        const helperAddress = await connectFreighterWallet().catch(() => null);
-        address = access.address ?? (await getAddress()).address ?? helperAddress;
-      } catch {
-        // fallback to new connectFreighterWallet
-        const result = await connectFreighterWallet();
-        address = typeof result === "string" ? result : result?.address;
-      }
+      const result = await connectFreighterWallet();
+      const address = typeof result === "string" ? result : result?.address;
+      
       if (!address) {
         throw new Error("Failed to retrieve wallet address from Freighter.");
       }
@@ -402,7 +389,6 @@ export default function VendorProfile() {
               <StatCard label="Joined" value={joined} delay={0.25} />
             </div>
 
-<<<<<<< HEAD
             <div className="mt-4">
               {profile?.walletAddress ? (
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
@@ -410,11 +396,14 @@ export default function VendorProfile() {
                   <div className="mt-1 break-all font-[family-name:var(--font-manrope)] text-sm font-semibold text-neutral-900">
                     {profile.walletAddress}
                   </div>
-                  <p className="mt-2 text-xs text-neutral-500">
-                    Network label hint: connect the same Freighter account you use on Trustless Work testnet.
+                  <p className="mt-2 text-xs text-neutral-400">
+                    Freighter will re-confirm the active wallet every time you connect.
+                    {getExpectedWalletNetworkLabel() !== "any Stellar network"
+                      ? ` Expected network: ${getExpectedWalletNetworkLabel()}.`
+                      : ""}
                   </p>
-                  <p className="mt-1 text-xs text-neutral-400">
-                    Re-confirm this wallet before accepting escrow actions if you switch browser accounts.
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Network label hint: connect the same Freighter account you use on Trustless Work testnet.
                   </p>
                 </div>
               ) : (
@@ -430,39 +419,8 @@ export default function VendorProfile() {
                   <p className="text-xs text-neutral-500">
                     Network label hint: use your Freighter testnet wallet for AgroShield escrow actions.
                   </p>
-                  <p className="text-xs text-neutral-400">
-                    Wallet re-confirm note: if the popup shows a different account than expected, cancel and reconnect.
-                  </p>
                 </div>
               )}
-=======
-             {/* Wallet connection */}
-             <div className="mt-4">
-               {profile?.walletAddress ? (
-                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
-                     Wallet
-                   </div>
-                   <div className="mt-1 break-all font-[family-name:var(--font-manrope)] text-sm font-semibold text-neutral-900">
-                     {profile.walletAddress}
-                   </div>
-                   <p className="mt-2 text-xs text-neutral-400">
-                     Freighter will re-confirm the active wallet every time you connect.
-                     {getExpectedWalletNetworkLabel() !== "any Stellar network"
-                       ? ` Expected network: ${getExpectedWalletNetworkLabel()}.`
-                       : ""}
-                   </p>
-                 </div>
-               ) : (
-                 <button
-                   type="button"
-                   onClick={handleConnectWallet}
-                   disabled={connectingWallet}
-                   className="w-full rounded-2xl border border-neutral-200 bg-[#16a34a] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-70"
-                 >
-                   {connectingWallet ? "Connecting..." : "Connect Wallet"}
-                 </button>
-               )}
               {walletError ? (
                 <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
                   {walletError}

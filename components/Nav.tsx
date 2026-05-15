@@ -28,10 +28,7 @@ function Nav() {
   const pathname = usePathname();
   const [role, setRole] = useState<UserRole>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  // Merge both menu states and refs
-  const [menuOpen, setMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -96,22 +93,11 @@ function Nav() {
     };
   }, [hydrated, isAuthed]);
 
-<<<<<<< HEAD
   const profileRoute = role === "VENDOR" ? "/vendor/profile" : "/farmer/profile";
 
   useEffect(() => {
-    // Merge both menu open effects
     function handlePointerDown(event: MouseEvent | PointerEvent) {
       const target = event.target as Node;
-      // Handle old menu
-      if (menuOpen) {
-        const clickedInsideMenu = menuRef.current?.contains(target);
-        const clickedProfileButton = profileButtonRef.current?.contains(target);
-        if (!clickedInsideMenu && !clickedProfileButton) {
-          setMenuOpen(false);
-        }
-      }
-      // Handle new menu
       if (isProfileMenuOpen) {
         const menu = profileMenuRef.current;
         const button = profileButtonRef.current;
@@ -122,7 +108,6 @@ function Nav() {
     }
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setMenuOpen(false);
         setIsProfileMenuOpen(false);
       }
     }
@@ -134,9 +119,8 @@ function Nav() {
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [menuOpen, isProfileMenuOpen]);
+  }, [isProfileMenuOpen]);
 
-  // Merge both sign out flows
   const handleSignOut = async () => {
     const token = localStorage.getItem("agroshield_token");
     try {
@@ -151,10 +135,9 @@ function Nav() {
         });
       }
     } catch {
-      // Best effort only. Logout must still complete.
+      // Best effort only
     } finally {
       localStorage.removeItem("agroshield_token");
-      setMenuOpen(false);
       setIsProfileMenuOpen(false);
       setRole(null);
       setProfileImage(null);
@@ -233,18 +216,15 @@ function Nav() {
           </div>
 
           {hydrated && isAuthed ? (
-            <div className="relative flex items-center gap-3 text-sm text-neutral-100" ref={menuRef}>
+            <div className="relative flex items-center gap-3 text-sm text-neutral-100">
               <button
                 ref={profileButtonRef}
                 type="button"
                 className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-white/10 transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/40"
                 aria-label="Open profile menu"
                 aria-haspopup="menu"
-                aria-expanded={isProfileMenuOpen || menuOpen}
-                onClick={() => {
-                  setIsProfileMenuOpen((current) => !current);
-                  setMenuOpen((value) => !value);
-                }}
+                aria-expanded={isProfileMenuOpen}
+                onClick={() => setIsProfileMenuOpen((current) => !current)}
                 title="Open profile menu"
               >
                 {profileImage ? (
@@ -259,50 +239,6 @@ function Nav() {
                 )}
               </button>
 
-              {/* Render both menus for compatibility, only one will show at a time */}
-              {menuOpen ? (
-                <div className="absolute right-0 top-12 w-56 overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 py-2 text-sm text-neutral-200 shadow-xl">
-                  <Link
-                    href={profileRoute}
-                    className="block px-4 py-2 transition hover:bg-white/5"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    View profile
-                  </Link>
-                  {role === "VENDOR" ? (
-                    <Link
-                      href="/vendor/bids"
-                      className="block px-4 py-2 transition hover:bg-white/5"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      My bids
-                    </Link>
-                  ) : null}
-                  {role === "FARMER" ? (
-                    <Link
-                      href="/farmer/cases"
-                      className="block px-4 py-2 transition hover:bg-white/5"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      My cases
-                    </Link>
-                  ) : null}
-                  <Link
-                    href="/settings"
-                    className="block px-4 py-2 transition hover:bg-white/5"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Settings
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="block w-full px-4 py-2 text-left text-red-400 transition hover:bg-red-500/10"
-                  >
-                    Sign out
-                  </button>
-                </div>
-              ) : null}
               {isProfileMenuOpen ? (
                 <div
                   ref={profileMenuRef}
@@ -310,6 +246,32 @@ function Nav() {
                   aria-label="Profile menu"
                   className="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-52 overflow-hidden rounded-3xl border border-white/10 bg-neutral-900 p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.55)]"
                 >
+                  <Link
+                    href={profileRoute}
+                    role="menuitem"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="flex w-full items-center rounded-2xl px-4 py-3 text-sm font-medium text-neutral-200 transition hover:bg-white/10 hover:text-white"
+                  >
+                    View profile
+                  </Link>
+                  {role === "VENDOR" ? (
+                    <Link
+                      href="/vendor/bids"
+                      className="flex w-full items-center rounded-2xl px-4 py-3 text-sm font-medium text-neutral-200 transition hover:bg-white/10 hover:text-white"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                    >
+                      My bids
+                    </Link>
+                  ) : null}
+                  {role === "FARMER" ? (
+                    <Link
+                      href="/farmer/cases"
+                      className="flex w-full items-center rounded-2xl px-4 py-3 text-sm font-medium text-neutral-200 transition hover:bg-white/10 hover:text-white"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                    >
+                      My cases
+                    </Link>
+                  ) : null}
                   <Link
                     href="/profile#settings"
                     role="menuitem"
