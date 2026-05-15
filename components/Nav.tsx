@@ -58,12 +58,7 @@ export default function Nav() {
     role === "VENDOR" ? "/vendor/profile" : "/farmer/profile";
 
   return (
-    <motion.nav
-      initial={{ opacity: 0, y: -12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="fixed top-6 left-0 right-0 z-50"
-    >
+    <nav className="fixed top-6 left-0 right-0 z-50">
       <div className="mx-auto w-full max-w-4xl px-6">
         <div className="flex items-center justify-between rounded-full bg-neutral-900/90 px-5 py-3 text-white shadow-sm backdrop-blur">
           <Link
@@ -134,6 +129,8 @@ export default function Nav() {
           )}
         </div>
       </div>
-    </motion.nav>
+    </nav>
   );
 }
+
+export default memo(Nav);

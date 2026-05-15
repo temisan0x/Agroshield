@@ -26,7 +26,7 @@ export async function GET(
         },
         escrow: true,
         dispute: true,
-        farmer: { select: { id: true, email: true } },
+        farmer: { select: { id: true, email: true, walletAddress: true } },
       },
     });
 

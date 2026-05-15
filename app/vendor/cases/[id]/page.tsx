@@ -17,7 +17,15 @@ export default async function VendorCaseDetailPage({
     <div className="min-h-screen bg-[#F5F0EB]">
       <Nav />
       <main className="pt-28 pb-24">
-        <CaseDetail id={id} />
+        <div className="mx-auto max-w-5xl px-6 py-12">
+          <a
+            href="/marketplace"
+            className="mb-8 inline-flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-neutral-800"
+          >
+            ← Back to Marketplace
+          </a>
+          <CaseDetail id={id} />
+        </div>
       </main>
       <Footer />
     </div>

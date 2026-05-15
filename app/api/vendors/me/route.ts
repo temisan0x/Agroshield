@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       where: { userId: user.id },
     });
 
-    return NextResponse.json({ success: true, profile });
+    return NextResponse.json({ success: true, profile: { ...profile, walletAddress: user.walletAddress } });
   } catch (error) {
     console.error("[VENDOR_ME_GET]", error);
     return NextResponse.json(
