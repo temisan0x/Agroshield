@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import type { VendorProfileData, VendorProfilePayload } from "./types";
 import StatCard from "./StatCard";
-import { requestAccess, getAddress } from "@stellar/freighter-api";
+import { requestAccess } from "@stellar/freighter-api";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -168,7 +169,8 @@ export default function VendorProfile() {
   }, []);
 
   useEffect(() => {
-    fetchProfile();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchProfile();
   }, [fetchProfile]);
 
   const handleSave = async (payload: VendorProfilePayload) => {
@@ -211,9 +213,7 @@ export default function VendorProfile() {
         throw new Error(access.error.message ?? "Failed to request access.");
       }
 
-      const { address } = await getAddress();
-
-      if (!address) {
+      if (!access.address) {
         throw new Error("Failed to retrieve wallet address from Freighter.");
       }
 
@@ -223,7 +223,7 @@ export default function VendorProfile() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ walletAddress: address }),
+        body: JSON.stringify({ walletAddress: access.address }),
       });
 
       const data = (await response.json()) as { success?: boolean; walletAddress?: string; error?: string };
@@ -349,12 +349,12 @@ export default function VendorProfile() {
             </div>
 
             {/* Nav to cases */}
-            <a
+            <Link
               href="/vendor/cases"
               className="mt-6 block w-full rounded-2xl border border-neutral-200 bg-white px-6 py-3 text-center text-sm font-semibold text-neutral-900 transition hover:-translate-y-0.5 hover:shadow-sm"
             >
               Browse open cases →
-            </a>
+            </Link>
           </section>
 
           {/* Right: stats */}

@@ -15,6 +15,8 @@ export async function POST(request: NextRequest) {
     const usernameInput = typeof body?.username === "string" ? body.username.trim().toLowerCase() : "";
     const walletAddress =
       typeof body?.walletAddress === "string" ? body.walletAddress.trim() : undefined;
+    const profileImage =
+      typeof body?.profileImage === "string" ? body.profileImage.trim() : undefined;
 
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
@@ -33,6 +35,10 @@ export async function POST(request: NextRequest) {
 
     if (walletAddress !== undefined && walletAddress.length === 0) {
       return NextResponse.json({ error: "Wallet address cannot be empty" }, { status: 400 });
+    }
+
+    if (profileImage !== undefined && profileImage.length === 0) {
+      return NextResponse.json({ error: "Profile image cannot be empty" }, { status: 400 });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -58,6 +64,7 @@ export async function POST(request: NextRequest) {
         email,
         ...(nextUsername ? { username: nextUsername } : {}),
         ...(walletAddress === undefined ? {} : { walletAddress }),
+        ...(profileImage === undefined ? {} : { profileImage }),
       },
       select: {
         id: true,
@@ -65,6 +72,7 @@ export async function POST(request: NextRequest) {
         username: true,
         role: true,
         walletAddress: true,
+        profileImage: true,
         createdAt: true,
       },
     });

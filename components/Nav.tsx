@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { useAuthStatus, useHydrated } from "@/lib/auth-client";
 
 const fallbackAvatar = (
@@ -23,6 +23,47 @@ function Nav() {
   const isAuthed = useAuthStatus();
   const hydrated = useHydrated();
   const pathname = usePathname();
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadProfileImage() {
+      if (!hydrated || !isAuthed) {
+        if (active) setProfileImage(null);
+        return;
+      }
+
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) {
+        if (active) setProfileImage(null);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/profile/summary", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          profile?: { user?: { profileImage?: string | null } };
+        };
+
+        if (active) {
+          setProfileImage(
+            response.ok ? data.profile?.user?.profileImage ?? null : null
+          );
+        }
+      } catch {
+        if (active) setProfileImage(null);
+      }
+    }
+
+    void loadProfileImage();
+
+    return () => {
+      active = false;
+    };
+  }, [hydrated, isAuthed]);
 
   return (
     <nav className="fixed top-6 left-0 right-0 z-50">
@@ -84,7 +125,18 @@ function Nav() {
                 aria-label="Open profile"
                 title="Open profile"
               >
-                {fallbackAvatar}
+                {profileImage ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={profileImage}
+                      alt="Profile"
+                      className="h-9 w-9 rounded-full object-cover"
+                    />
+                  </>
+                ) : (
+                  fallbackAvatar
+                )}
               </Link>
             </div>
           ) : null}

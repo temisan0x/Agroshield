@@ -15,18 +15,18 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { escrowId, bidId, signedXdr } = body ?? {};
+    const { escrowId, signedXdr } = body ?? {};
 
-    if (!escrowId || !bidId || !signedXdr) {
+    if (!escrowId || !signedXdr) {
       return NextResponse.json(
-        { error: "escrowId, bidId and signedXdr are required" },
+        { error: "escrowId and signedXdr are required" },
         { status: 400 }
       );
     }
 
     const escrow = await prisma.escrow.findUnique({
       where: { id: escrowId },
-      include: { case: true, transactions: true },
+      include: { case: true },
     });
 
     if (!escrow) {
@@ -37,61 +37,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const bid = await prisma.bid.findUnique({
-      where: { id: bidId },
+    if (!escrow.contractId) {
+      return NextResponse.json({ error: "Escrow contractId missing" }, { status: 400 });
+    }
+
+    const pendingFundTx = await prisma.transaction.findFirst({
+      where: { escrowId, type: "FUND" },
+      orderBy: { createdAt: "desc" },
     });
 
-    if (!bid || bid.caseId !== escrow.caseId) {
-      return NextResponse.json({ error: "Bid not found" }, { status: 404 });
+    if (!pendingFundTx?.xdr) {
+      return NextResponse.json(
+        { error: "No pending funding transaction found" },
+        { status: 409 }
+      );
     }
 
     const broadcastResponse = await sendTransaction(signedXdr);
-    const contractId =
-      (broadcastResponse as { contractId?: string }).contractId ??
-      (broadcastResponse as { result?: { contractId?: string } }).result
-        ?.contractId ??
-      (broadcastResponse as { data?: { contractId?: string } }).data?.contractId;
-
-    if (!contractId) {
-      return NextResponse.json(
-        { error: "Trustless Work did not return a contractId" },
-        { status: 502 }
-      );
-    }
 
     await prisma.$transaction(async (tx) => {
       await tx.escrow.update({
         where: { id: escrowId },
-        data: { contractId, status: "AWAITING_FUNDING" },
-      });
-
-      await tx.bid.updateMany({
-        where: { caseId: escrow.caseId, id: { not: bidId } },
-        data: { selected: false },
-      });
-
-      await tx.bid.update({
-        where: { id: bidId },
-        data: { selected: true },
-      });
-
-      await tx.case.update({
-        where: { id: escrow.caseId },
-        data: { status: "IN_PROGRESS" },
+        data: { status: "FUNDED" },
       });
 
       await tx.transaction.updateMany({
-        where: { escrowId, type: "DEPLOY" },
+        where: { escrowId, type: "FUND" },
         data: { signed: true },
       });
     });
 
     return NextResponse.json({
       success: true,
-      contractId,
+      broadcastResponse,
     });
   } catch (error) {
-    console.error("[ESCROW_CONFIRM]", error);
+    console.error("[ESCROW_FUND_CONFIRM]", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }

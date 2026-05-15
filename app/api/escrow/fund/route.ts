@@ -40,24 +40,55 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Escrow contractId missing" }, { status: 400 });
     }
 
-    let response: { unsignedTransaction?: string } = {};
-    try {
-      response = await fundEscrow({
-        contractId: escrow.contractId,
-        amount: escrow.amount.toString(),
-        depositor: farmer.walletAddress,
+    const existingFundTx = await prisma.transaction.findFirst({
+      where: { escrowId, type: "FUND" },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (existingFundTx?.xdr) {
+      return NextResponse.json({
+        success: true,
+        unsignedTransaction: existingFundTx.xdr,
       });
-    } catch (error) {
-      console.error("[ESCROW_FUND_TW]", error);
-      response = { unsignedTransaction: "DEMO_XDR_UNSIGNED" };
     }
+
+    const response = await fundEscrow({
+      contractId: escrow.contractId,
+      amount: Number(escrow.amount),
+      signer: farmer.walletAddress,
+    });
+
+    const unsignedTransaction = response.unsignedTransaction;
+    if (!unsignedTransaction) {
+      return NextResponse.json(
+        { error: "Trustless Work did not return an unsigned transaction." },
+        { status: 502 }
+      );
+    }
+
+    await prisma.transaction.create({
+      data: {
+        escrowId,
+        xdr: unsignedTransaction,
+        type: "FUND",
+        signed: false,
+      },
+    });
+
+    await prisma.escrow.update({
+      where: { id: escrowId },
+      data: { status: "AWAITING_FUND_SIGNATURE" },
+    });
 
     return NextResponse.json({
       success: true,
-      unsignedTransaction: response.unsignedTransaction ?? "DEMO_XDR_UNSIGNED",
+      unsignedTransaction,
     });
   } catch (error) {
     console.error("[ESCROW_FUND]", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal server error" },
+      { status: 500 }
+    );
   }
 }
