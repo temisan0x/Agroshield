@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { signTransaction, connectWallet } from "@/lib/walletKit";
-import { sendSignedTransaction } from "@/lib/trustlesswork";
-import type { CaseDetailData } from "./types";
+import { sendSignedTransaction, changeMilestoneStatus } from "@/lib/trustlesswork";
 
 interface MarkTreatmentDoneButtonProps {
   caseId: string;
+  contractId: string;
   assignedVendorId: string | null;
   currentStatus: string;
   onSuccess: (newStatus: string) => void;
@@ -33,6 +33,7 @@ function getAuthContext() {
 
 export function MarkTreatmentDoneButton({
   caseId,
+  contractId,
   assignedVendorId,
   currentStatus,
   onSuccess,
@@ -62,38 +63,20 @@ export function MarkTreatmentDoneButton({
     }
 
     try {
-      const caseRes = await fetch(`/api/cases/${caseId}`);
-      const casePayload = (await caseRes.json()) as { case?: CaseDetailData; error?: string };
-
-      if (!caseRes.ok || !casePayload.case) {
-        throw new Error(casePayload.error ?? "Failed to load case escrow details.");
-      }
-
-      const contractId = casePayload.case.escrow?.contractId;
       if (!contractId) {
         throw new Error("Escrow contractId missing.");
       }
 
       // 1. Change milestone status
-      const twRes = await fetch(
-        "/api/trustlesswork/change-milestone",
-        {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contractId,
-            milestoneIndex: 0,
-            newStatus: "completed",
-            serviceProvider: auth.userId,
-          }),
-        },
-      );
+      const twPayload = await changeMilestoneStatus({
+        contractId,
+        milestoneIndex: "0",
+        newStatus: "completed",
+        serviceProvider: auth.userId,
+      });
 
-      const twPayload = await twRes.json();
-      if (!twRes.ok || !twPayload.unsignedTransaction) {
-        throw new Error(twPayload.error ?? twPayload.message ?? "Failed to prepare milestone update.");
+      if (!twPayload || typeof twPayload !== "object" || !("unsignedTransaction" in twPayload)) {
+        throw new Error("Failed to prepare milestone update.");
       }
 
       // 2. Connect wallet if needed
@@ -106,7 +89,7 @@ export function MarkTreatmentDoneButton({
 
       // 3. Sign transaction on TESTNET
       const signedXdr = await signTransaction({
-        unsignedTransaction: twPayload.unsignedTransaction,
+        unsignedTransaction: String((twPayload as { unsignedTransaction?: string }).unsignedTransaction),
         address: walletAddress,
       });
 

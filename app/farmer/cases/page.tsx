@@ -159,7 +159,7 @@ export default function FarmerCasesPage() {
                     key={caseItem.id}
                     caseItem={caseItem}
                     index={index}
-                    onClick={() => router.push(`/vendor/cases/${caseItem.id}`)}
+                    onClick={() => router.push(`/farmer/cases/${caseItem.id}`)}
                   />
                 ))}
               </div>

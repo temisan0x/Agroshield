@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { disputeEscrow } from "@/lib/trustlesswork";
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,10 +14,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { caseId, reason } = await request.json();
+    const { caseId, reason, contractId } = await request.json();
 
-    if (!caseId || !reason) {
-      return NextResponse.json({ error: "caseId and reason are required" }, { status: 400 });
+    if (!caseId || !reason || !contractId) {
+      return NextResponse.json(
+        { error: "caseId, reason, and contractId are required" },
+        { status: 400 }
+      );
     }
 
     const caseData = await prisma.case.findUnique({
@@ -51,27 +55,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Farmer wallet address not found" }, { status: 400 });
     }
 
-    // Call Trustless Work API
-    const twResponse = await fetch("https://dev.api.trustlesswork.com/escrow/dispute-escrow", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.TRUSTLESS_WORK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        contractId: caseData.escrow.contractId,
-        signer: user.walletAddress,
-      }),
+    const twData = await disputeEscrow({
+      contractId,
+      signer: user.walletAddress,
     });
-
-    const twData = await twResponse.json();
-
-    if (!twResponse.ok) {
-      return NextResponse.json(
-        { error: twData.error || twData.message || "Trustless Work API error" },
-        { status: twResponse.status }
-      );
-    }
 
     // Update DB after successful TW call
     const dispute = await prisma.dispute.create({

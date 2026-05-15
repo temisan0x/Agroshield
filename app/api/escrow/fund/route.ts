@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const response = await fundEscrow({
       contractId: escrow.contractId,
       amount: String(escrow.amount),
-      depositor: farmer.walletAddress,
+      signer: farmer.walletAddress,
     });
 
     const unsignedTransaction = response.unsignedTransaction;

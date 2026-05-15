@@ -18,13 +18,13 @@ export default async function VendorCaseDetailPage({
       <Nav />
       <main className="pt-28 pb-24">
         <div className="mx-auto max-w-5xl px-6 py-12">
-          <a
-            href="/marketplace"
-            className="mb-8 inline-flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-neutral-800"
-          >
-            ← Back to Marketplace
-          </a>
-          <CaseDetail id={id} />
+        <a
+          href="/marketplace"
+          className="mb-8 inline-flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-neutral-800"
+        >
+          ← Back to Marketplace
+        </a>
+          <CaseDetail id={id} viewerRole="VENDOR" />
         </div>
       </main>
       <Footer />
