@@ -18,7 +18,9 @@ export default function VendorBids() {
   const [data, setData] = useState<CaseWithBids[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"all" | "pending" | "accepted" | "rejected">("all");
+  const [activeTab, setActiveTab] = useState<
+    "all" | "pending" | "accepted" | "rejected"
+  >("all");
 
   const fetchBids = useCallback(async () => {
     try {
@@ -50,16 +52,19 @@ export default function VendorBids() {
     }
   }, []);
 
-  useEffect(() => { fetchBids(); }, [fetchBids]);
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchBids();
+    });
+  }, [fetchBids]);
 
-  // Flatten all bids with case context
   const allBids = data.flatMap(({ caseItem, bids }) =>
     bids.map((bid) => ({
       ...bid,
       caseDiagnosis: caseItem.diagnosis?.disease ?? "Undiagnosed",
       caseStatus: caseItem.status,
       caseId: caseItem.id,
-    }))
+    })),
   );
 
   const filtered = allBids.filter((b) => {
@@ -84,8 +89,14 @@ export default function VendorBids() {
         <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-8">
           <p className="text-sm font-semibold text-red-700">Error</p>
           <p className="mt-1 text-xs text-red-500">{error}</p>
-          <button onClick={() => { setError(null); setLoading(true); fetchBids(); }}
-            className="mt-4 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800">
+          <button
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              fetchBids();
+            }}
+            className="mt-4 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+          >
             Retry
           </button>
         </div>
@@ -112,16 +123,21 @@ export default function VendorBids() {
             </p>
 
             <div className="mt-6 flex gap-1 rounded-2xl border border-neutral-200 bg-[#F5F0EB] p-1 w-fit">
-              {(["all", "pending", "accepted", "rejected"] as const).map((tab) => (
-                <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`rounded-xl px-4 py-1.5 text-xs font-medium capitalize transition ${
-                    activeTab === tab
-                      ? "bg-white text-neutral-900 shadow-sm"
-                      : "text-neutral-500 hover:text-neutral-700"
-                  }`}>
-                  {tab}
-                </button>
-              ))}
+              {(["all", "pending", "accepted", "rejected"] as const).map(
+                (tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`rounded-xl px-4 py-1.5 text-xs font-medium capitalize transition ${
+                      activeTab === tab
+                        ? "bg-white text-neutral-900 shadow-sm"
+                        : "text-neutral-500 hover:text-neutral-700"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ),
+              )}
             </div>
           </div>
         </div>
@@ -131,9 +147,14 @@ export default function VendorBids() {
             {filtered.length > 0 ? (
               filtered.map((bid, i) => {
                 const status = deriveBidStatus(bid.selected, bid.caseStatus);
-                const date = new Date(bid.createdAt).toLocaleDateString("en-NG", {
-                  month: "short", day: "numeric", year: "numeric",
-                });
+                const date = new Date(bid.createdAt).toLocaleDateString(
+                  "en-NG",
+                  {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  },
+                );
                 return (
                   <BidRow
                     key={bid.id}
@@ -147,16 +168,22 @@ export default function VendorBids() {
                 );
               })
             ) : (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="rounded-2xl border border-dashed border-neutral-200 bg-[#F9F4EE] px-6 py-12 text-center">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="rounded-2xl border border-dashed border-neutral-200 bg-[#F9F4EE] px-6 py-12 text-center"
+              >
                 <p className="text-sm text-neutral-500">
                   {activeTab === "all"
                     ? "You haven\u2019t submitted any bids yet."
                     : `No ${activeTab} bids.`}
                 </p>
                 {activeTab === "all" && (
-                  <a href="/vendor/cases"
-                    className="mt-4 inline-block rounded-xl bg-neutral-900 px-5 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800">
+                  <a
+                    href="/vendor/cases"
+                    className="mt-4 inline-block rounded-xl bg-neutral-900 px-5 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                  >
                     Browse open cases
                   </a>
                 )}

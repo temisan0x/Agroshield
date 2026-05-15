@@ -200,5 +200,3 @@ function Nav() {
     </nav>
   );
 }
-
-export default memo(Nav);
