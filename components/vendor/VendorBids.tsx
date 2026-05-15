@@ -7,6 +7,7 @@ import type { CaseListItem, VendorBidItem } from "./types";
 import { deriveBidStatus } from "./types";
 import BidRow from "./BidRow";
 import Link from "next/link";
+import { ProfileSkeleton } from "@/components/Skeleton";
 
 interface CaseWithBids {
   caseItem: CaseListItem;
@@ -77,11 +78,7 @@ export default function VendorBids() {
   });
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-32">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
-      </div>
-    );
+    return <ProfileSkeleton />;
   }
 
   if (error) {
@@ -111,7 +108,7 @@ export default function VendorBids() {
         initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_30px_80px_-60px_rgba(0,0,0,0.4)]"
+        className="overflow-hidden"
       >
         <div className="relative border-b border-neutral-100 px-8 py-8">
           <div className="absolute right-0 top-0 h-40 w-40 -translate-y-8 translate-x-8 rounded-full bg-[#c7f1d2] opacity-40 blur-3xl" />
@@ -123,7 +120,7 @@ export default function VendorBids() {
               Track the status of your submitted treatment proposals.
             </p>
 
-            <div className="mt-6 flex gap-1 rounded-2xl border border-neutral-200 bg-[#F5F0EB] p-1 w-fit">
+            <div className="mt-6 flex gap-1 rounded-2xl border border-neutral-200 p-1 w-fit">
               {(["all", "pending", "accepted", "rejected"] as const).map(
                 (tab) => (
                   <button

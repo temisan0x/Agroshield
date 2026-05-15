@@ -52,7 +52,7 @@ export default function CaseCard({ caseItem, index = 0, onClick, action }: CaseC
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: index * 0.04, ease: "easeOut" }}
       onClick={onClick}
-      className={`group relative h-full overflow-hidden rounded-2xl border border-neutral-100 bg-white shadow-sm transition-all duration-200 hover:border-neutral-200 hover:shadow-md ${
+      className={`group relative h-full overflow-hidden transition-all duration-200 ${
         onClick ? "cursor-pointer" : ""
       }`}
     >

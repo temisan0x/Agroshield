@@ -31,7 +31,7 @@ const cards = [
 export default function Bento() {
   return (
     <section id="how" className="py-24">
-      <div className="mx-auto max-w-4xl px-6">
+      <div className="mx-auto max-w-5xl px-6">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}

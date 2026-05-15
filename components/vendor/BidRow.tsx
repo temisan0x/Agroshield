@@ -34,8 +34,8 @@ export default function BidRow({
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.35, delay: index * 0.07 }}
       onClick={onClick}
-      className={`flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 bg-white px-5 py-4 transition hover:shadow-sm ${
-        onClick ? "cursor-pointer" : ""
+      className={`flex items-center justify-between gap-4 px-5 py-4 transition ${
+        onClick ? "cursor-pointer hover:bg-neutral-50/50" : ""
       }`}
     >
       <div className="min-w-0 flex-1">

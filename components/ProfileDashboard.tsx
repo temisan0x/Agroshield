@@ -489,7 +489,7 @@ export default function ProfileDashboard() {
   if (state.status === "loading") {
     return (
       <main className="pt-20 pb-16">
-        <div className="mx-auto max-w-4xl px-6">
+        <div className="mx-auto max-w-6xl px-6">
           <LoadingShell />
         </div>
       </main>
@@ -499,7 +499,7 @@ export default function ProfileDashboard() {
   if (state.status === "unauthenticated") {
     return (
       <main className="pt-28 pb-24">
-        <div className="mx-auto max-w-4xl px-6">
+        <div className="mx-auto max-w-6xl px-6">
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -538,7 +538,7 @@ export default function ProfileDashboard() {
   if (state.status === "error") {
     return (
       <main className="pt-28 pb-24">
-        <div className="mx-auto max-w-4xl px-6">
+        <div className="mx-auto max-w-6xl px-6">
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -597,7 +597,7 @@ export default function ProfileDashboard() {
 
   return (
     <main className="pt-20 pb-16">
-      <div className="mx-auto max-w-4xl px-6">
+      <div className="mx-auto max-w-6xl px-6">
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

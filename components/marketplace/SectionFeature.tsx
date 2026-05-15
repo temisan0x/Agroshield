@@ -28,7 +28,7 @@ export default function SectionFeature({
       transition={{ duration: 0.5 }}
       className="py-24"
     >
-      <div className="mx-auto grid max-w-4xl items-center gap-10 px-6 md:grid-cols-2">
+      <div className="mx-auto grid max-w-5xl items-center gap-10 px-6 md:grid-cols-2">
         <div className={reverse ? "md:order-2" : ""}>
           <div className="inline-flex items-center gap-2 rounded-full bg-[#16a34a]/10 px-3 py-1 text-sm text-[#16a34a]">
             {label}

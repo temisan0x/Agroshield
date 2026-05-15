@@ -12,7 +12,7 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function ProfileSkeleton() {
   return (
-    <div className="mx-auto max-w-4xl px-6 py-12">
+    <div className="mx-auto max-w-6xl px-6 py-12">
       <div className="overflow-hidden">
         <div className="animate-pulse space-y-8 px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
           <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">

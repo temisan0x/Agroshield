@@ -196,7 +196,7 @@ export default function AdminDisputesPage() {
   return (
     <div className="min-h-screen bg-[#F5F0EB]">
       <Nav />
-      <main className="mx-auto max-w-4xl px-6 py-12 pt-28 pb-24">
+      <main className="mx-auto max-w-6xl px-6 py-12 pt-28 pb-24">
         <div className="mb-8">
           <span className="inline-block rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white">
             🛡 Admin

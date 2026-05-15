@@ -5,7 +5,7 @@ export default function ProfileLoading() {
     <div className="min-h-screen bg-[#f5f0eb]">
       <Nav />
       <main className="pt-28 pb-24">
-        <div className="mx-auto max-w-4xl px-6">
+        <div className="mx-auto max-w-6xl px-6">
           <div className="overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_30px_80px_-60px_rgba(0,0,0,0.5)]">
             <div className="animate-pulse space-y-8 px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
               <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">

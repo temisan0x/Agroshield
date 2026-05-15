@@ -21,6 +21,7 @@ type VendorStats = {
   openCases: number;
   activeBids: number;
   wonCases: number;
+  highUrgency: number;
 };
 
 export default function MarketplacePage() {
@@ -64,7 +65,7 @@ export default function MarketplacePage() {
   const fetchVendorStats = async () => {
     const token = localStorage.getItem("agroshield_token");
     if (!token) {
-      setVendorStats({ openCases: 0, activeBids: 0, wonCases: 0 });
+      setVendorStats({ openCases: 0, activeBids: 0, wonCases: 0, highUrgency: 0 });
       return;
     }
 
@@ -90,7 +91,10 @@ export default function MarketplacePage() {
     const activeBids = Number(stats.find((s) => s.label === "Bids placed")?.value ?? 0);
     const wonCases = Number(stats.find((s) => s.label === "Selected wins")?.value ?? 0);
 
-    setVendorStats({ openCases, activeBids, wonCases });
+    const highUrgency = (casesPayload.cases ?? []).filter((entry) => 
+      entry.status === "OPEN" && String(entry.diagnosis?.urgency ?? "").toLowerCase().includes("high")
+    ).length;
+    setVendorStats({ openCases, activeBids, wonCases, highUrgency });
   };
 
   const loadMarketplace = async () => {
@@ -129,9 +133,12 @@ export default function MarketplacePage() {
           const profilePayload = await profileRes.json();
           const stats = profilePayload.profile.stats ?? [];
           const openCases = fetchedCases.filter((entry: any) => entry.status === "OPEN").length;
+          const highUrgency = fetchedCases.filter((entry: any) => 
+            entry.status === "OPEN" && String(entry.diagnosis?.urgency ?? "").toLowerCase().includes("high")
+          ).length;
           const activeBids = Number(stats.find((s: any) => s.label === "Bids placed")?.value ?? 0);
           const wonCases = Number(stats.find((s: any) => s.label === "Selected wins")?.value ?? 0);
-          setVendorStats({ openCases, activeBids, wonCases });
+          setVendorStats({ openCases, activeBids, wonCases, highUrgency });
         }
       }
     } catch (err) {
@@ -201,7 +208,7 @@ export default function MarketplacePage() {
         {loading ? (
           renderLoading()
         ) : error ? (
-          <div className="mx-auto max-w-4xl px-6">
+          <div className="mx-auto max-w-5xl px-6">
             <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-8 text-center">
               <p className="text-sm font-semibold text-red-700">Marketplace error</p>
               <p className="mt-2 text-xs text-red-600">{error}</p>
@@ -215,48 +222,44 @@ export default function MarketplacePage() {
             </div>
           </div>
         ) : user?.role === "FARMER" ? (
-          <div className="mx-auto w-full max-w-4xl px-6">
-            <section className="relative overflow-hidden rounded-[32px] border border-neutral-200 bg-white px-8 py-10 shadow-[0_30px_80px_-60px_rgba(0,0,0,0.4)]">
-              <div className="absolute right-0 top-0 h-52 w-52 -translate-y-10 translate-x-16 rounded-full bg-[#c7f1d2] opacity-50 blur-3xl" />
-              <div className="absolute bottom-0 left-0 h-52 w-52 -translate-x-16 translate-y-16 rounded-full bg-[#f1dcc7] opacity-60 blur-3xl" />
-              <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-                <div>
-                  <div className="inline-flex rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-[#16a34a]">
-                    Farmer workspace
-                  </div>
-                  <h1 className="mt-4 font-[family-name:var(--font-manrope)] text-4xl font-bold text-neutral-900">
-                    Track your crop cases and vendor bids in one place.
-                  </h1>
-                  <p className="mt-3 max-w-xl text-sm text-neutral-500">
-                    Keep an eye on open requests, review vendor proposals, and publish new cases
-                    directly from your diagnosis results.
-                  </p>
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    <a
-                      href="/diagnose"
-                      className="rounded-full bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white"
-                    >
-                      Post New Case →
-                    </a>
-                    <a
-                      href="/profile"
-                      className="rounded-full border border-neutral-200 bg-white px-5 py-2 text-sm font-semibold text-neutral-700"
-                    >
-                      Update Farm Profile
-                    </a>
-                  </div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <StatCard label="Total Cases" value={farmerStats.total} />
-                  <StatCard label="Open Cases" value={farmerStats.open} delay={0.05} />
-                  <StatCard label="In Progress" value={farmerStats.inProgress} delay={0.1} />
-                  <StatCard label="Total Bids" value={farmerStats.bids} delay={0.15} />
-                </div>
+          <div className="mx-auto w-full max-w-5xl px-6">
+            <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <span className="mb-2 inline-block rounded-full border border-green-100 bg-green-50 px-3 py-1 text-xs text-green-700">
+                  🌾 Farmer Workspace
+                </span>
+                <h1 className="font-[family-name:var(--font-manrope)] text-3xl font-extrabold tracking-tight text-neutral-900">
+                  Track your crop cases and bids
+                </h1>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Review vendor proposals and manage your treatment requests
+                </p>
               </div>
-            </section>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href="/diagnose"
+                  className="rounded-full bg-[#16a34a] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#15803d]"
+                >
+                  Post New Case →
+                </a>
+                <a
+                  href="/profile"
+                  className="rounded-full border border-neutral-200 px-5 py-2.5 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50"
+                >
+                  Update Farm Profile
+                </a>
+              </div>
+            </div>
+
+            <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <StatCard label="Total Cases" value={farmerStats.total} helper="cases submitted" />
+              <StatCard label="Open Cases" value={farmerStats.open} helper="awaiting bids" delay={0.05} />
+              <StatCard label="In Progress" value={farmerStats.inProgress} helper="treatment started" delay={0.1} />
+              <StatCard label="Total Bids" value={farmerStats.bids} helper="vendor proposals" delay={0.15} />
+            </div>
 
             {farmerCases.length === 0 ? (
-              <div className="mt-8 rounded-3xl border border-dashed border-neutral-200 bg-white p-10 text-center">
+              <div className="mt-8 rounded-3xl border border-dashed border-neutral-200 p-10 text-center">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#F5F0EB] text-2xl">
                   🌿
                 </div>
@@ -345,11 +348,31 @@ export default function MarketplacePage() {
               </div>
             </div>
 
-            <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="mb-12 grid grid-cols-2 gap-3 md:grid-cols-4">
               <StatCard label="Open Cases" value={vendorStats?.openCases ?? 0} helper="cases available" />
               <StatCard label="My Active Bids" value={vendorStats?.activeBids ?? 0} helper="in review" delay={0.05} />
               <StatCard label="Won Cases" value={vendorStats?.wonCases ?? 0} helper="in escrow" delay={0.1} />
               <StatCard label="Response Time" value="< 24h" helper="avg vendor reply" delay={0.15} />
+            </div>
+
+            <div className="mb-6">
+              <h2 className="font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">
+                Open Cases
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Browse new farmer requests and place treatment bids.
+              </p>
+            </div>
+
+            <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-2 lg:w-80">
+              <div className="rounded-2xl bg-white/30 px-4 py-3 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">Open now</p>
+                <p className="mt-1 text-2xl font-bold text-neutral-900">{vendorStats?.openCases ?? 0}</p>
+              </div>
+              <div className="rounded-2xl bg-white/30 px-4 py-3 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">High urgency</p>
+                <p className="mt-1 text-2xl font-bold text-neutral-900">{vendorStats?.highUrgency ?? 0}</p>
+              </div>
             </div>
 
             <MarketplaceFeed initialCases={cases} />
