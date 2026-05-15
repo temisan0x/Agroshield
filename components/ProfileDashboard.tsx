@@ -503,7 +503,7 @@ export default function ProfileDashboard() {
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-[32px] border border-neutral-200 bg-white p-8 shadow-[0_30px_80px_-60px_rgba(0,0,0,0.5)] md:p-10"
+            className="p-8 md:p-10"
           >
             <div className="inline-flex rounded-full border border-neutral-200 bg-[#f9f4ee] px-3 py-1 text-xs text-[#16a34a]">
               Profile required
@@ -542,7 +542,7 @@ export default function ProfileDashboard() {
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-[32px] border border-red-200 bg-white p-8 shadow-[0_30px_80px_-60px_rgba(0,0,0,0.5)] md:p-10"
+            className="p-8 md:p-10"
           >
             <div className="inline-flex rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-600">
               Profile error
@@ -602,7 +602,7 @@ export default function ProfileDashboard() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_30px_80px_-60px_rgba(0,0,0,0.5)]"
+          className="overflow-hidden"
         >
           <div className="relative px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
             <div className="absolute right-0 top-0 h-52 w-52 translate-x-16 -translate-y-16 rounded-full bg-[#d5ebff] opacity-50 blur-3xl" />
@@ -642,7 +642,7 @@ export default function ProfileDashboard() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -8, scale: 0.98 }}
                         transition={{ duration: 0.16 }}
-                        className="absolute left-0 top-[calc(100%+0.75rem)] z-20 w-56 overflow-hidden rounded-3xl border border-neutral-200 bg-white p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.35)]"
+                        className="absolute left-0 top-[calc(100%+0.75rem)] z-20 w-56 overflow-hidden rounded-3xl border border-neutral-200 bg-[#fcfaf8]/90 backdrop-blur-xl p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.35)]"
                         role="menu"
                         aria-label="Profile menu"
                       >
@@ -706,7 +706,7 @@ export default function ProfileDashboard() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
-                <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                <div className="p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
                     Member since
                   </div>
@@ -714,7 +714,7 @@ export default function ProfileDashboard() {
                     {formatDate(profile.user.createdAt)}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                <div className="p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
                     Wallet
                   </div>
@@ -780,7 +780,7 @@ export default function ProfileDashboard() {
                     ) : null}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-neutral-200 bg-white p-4 sm:col-span-2">
+                <div className="p-4 sm:col-span-2">
                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
                     Username
                   </div>
@@ -804,7 +804,7 @@ export default function ProfileDashboard() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.45 }}
-                  className="rounded-2xl border border-neutral-100 bg-[#f9f4ee] p-5"
+                  className="p-5"
                 >
                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
                     {stat.label}
@@ -820,7 +820,7 @@ export default function ProfileDashboard() {
             </div>
           </div>
 
-          <div className="grid gap-0 border-t border-neutral-100 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
             <section className="space-y-6 px-6 py-8 sm:px-8 lg:px-10">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -856,7 +856,7 @@ export default function ProfileDashboard() {
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.45, delay: index * 0.05 }}
-                        className="rounded-3xl border border-neutral-100 bg-white p-5 shadow-sm"
+                        className="p-5"
                       >
                         <div
                           className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${badgeTone}`}
@@ -891,7 +891,7 @@ export default function ProfileDashboard() {
               )}
             </section>
 
-            <aside className="space-y-6 border-t border-neutral-100 bg-[#f9f4ee] px-6 py-8 sm:px-8 lg:border-t-0 lg:border-l lg:px-10">
+            <aside className="space-y-6 px-6 py-8 sm:px-8 lg:px-10">
               <div>
                 <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
                   Activity
@@ -914,7 +914,7 @@ export default function ProfileDashboard() {
                     return (
                       <div
                         key={activity.id}
-                        className="rounded-3xl border border-neutral-100 bg-white p-5"
+                        className="p-5"
                       >
                         <div className="flex items-start gap-3">
                           <span
@@ -936,7 +936,7 @@ export default function ProfileDashboard() {
                     );
                   })
                 ) : (
-                  <div className="rounded-3xl border border-dashed border-neutral-200 bg-white p-5 text-sm text-neutral-500">
+                  <div className="rounded-3xl border border-dashed border-neutral-200 bg-[#fcfaf8]/60 backdrop-blur-xl p-5 text-sm text-neutral-500">
                     No recent activity yet.
                   </div>
                 )}
@@ -945,7 +945,7 @@ export default function ProfileDashboard() {
               <section
                 id="settings"
                 tabIndex={-1}
-                className="space-y-4 rounded-3xl border border-neutral-100 bg-white p-5"
+                className="space-y-4 p-5"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -976,7 +976,7 @@ export default function ProfileDashboard() {
                     return (
                       <div
                         key={setting.label}
-                        className="rounded-2xl border border-neutral-100 bg-[#f9f4ee] p-4"
+                        className="p-4"
                       >
                         <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
                           {setting.label}
@@ -1045,7 +1045,7 @@ export default function ProfileDashboard() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="profile-editor-title"
-            className="w-full max-w-xl overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_30px_80px_-40px_rgba(0,0,0,0.45)]"
+            className="w-full max-w-xl overflow-hidden rounded-[28px] border border-neutral-200 bg-[#fcfaf8]/95 backdrop-blur-xl shadow-[0_30px_80px_-40px_rgba(0,0,0,0.45)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="border-b border-neutral-100 px-6 py-5 sm:px-8">
@@ -1085,7 +1085,7 @@ export default function ProfileDashboard() {
                       email: event.target.value,
                     }))
                   }
-                  className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
+                  className="mt-2 w-full rounded-2xl border border-neutral-200 bg-[#fcfaf8]/40 px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
                 />
               </div>
 
@@ -1107,7 +1107,7 @@ export default function ProfileDashboard() {
                     }))
                   }
                   placeholder="lowercase letters, numbers, underscores"
-                  className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
+                  className="mt-2 w-full rounded-2xl border border-neutral-200 bg-[#fcfaf8]/40 px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
                 />
               </div>
 
@@ -1129,7 +1129,7 @@ export default function ProfileDashboard() {
                     }))
                   }
                   placeholder="Optional"
-                  className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
+                  className="mt-2 w-full rounded-2xl border border-neutral-200 bg-[#fcfaf8]/40 px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
                 />
               </div>
 
@@ -1158,7 +1158,7 @@ export default function ProfileDashboard() {
                     type="file"
                     accept="image/*"
                     onChange={handleProfileImageChange}
-                    className="block w-full cursor-pointer rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition file:mr-4 file:rounded-xl file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800 focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
+                    className="block w-full cursor-pointer rounded-2xl border border-neutral-200 bg-[#fcfaf8]/40 px-4 py-3 text-sm text-neutral-700 outline-none transition file:mr-4 file:rounded-xl file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800 focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
                   />
                 </div>
                 <p className="mt-2 text-xs text-neutral-400">
