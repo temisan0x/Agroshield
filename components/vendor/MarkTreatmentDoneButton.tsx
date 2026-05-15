@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { signTransaction } from "@stellar/freighter-api";
+import { signTransaction, connectWallet } from "@/lib/walletKit";
+import { sendSignedTransaction } from "@/lib/trustlesswork";
 import type { CaseDetailData } from "./types";
 
 interface MarkTreatmentDoneButtonProps {
@@ -11,8 +12,6 @@ interface MarkTreatmentDoneButtonProps {
   currentStatus: string;
   onSuccess: (newStatus: string) => void;
 }
-
-const TW_BASE_URL = "https://dev.api.trustlesswork.com";
 
 function getAuthContext() {
   if (typeof window === "undefined") return null;
@@ -63,7 +62,6 @@ export function MarkTreatmentDoneButton({
     }
 
     try {
-      let twRes;
       const caseRes = await fetch(`/api/cases/${caseId}`);
       const casePayload = (await caseRes.json()) as { case?: CaseDetailData; error?: string };
 
@@ -76,11 +74,14 @@ export function MarkTreatmentDoneButton({
         throw new Error("Escrow contractId missing.");
       }
 
-      twRes = await fetch(
-        `${TW_BASE_URL}/escrow/single-release/change-milestone-status`,
+      // 1. Change milestone status
+      const twRes = await fetch(
+        "/api/trustlesswork/change-milestone",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             contractId,
             milestoneIndex: 0,
@@ -90,35 +91,29 @@ export function MarkTreatmentDoneButton({
         },
       );
 
-      const twPayload = (await twRes.json().catch(() => ({}))) as {
-        unsignedTransaction?: string;
-        error?: string;
-        message?: string;
-      };
-
+      const twPayload = await twRes.json();
       if (!twRes.ok || !twPayload.unsignedTransaction) {
         throw new Error(twPayload.error ?? twPayload.message ?? "Failed to prepare milestone update.");
       }
 
-      const signedXdr = await signTransaction(twPayload.unsignedTransaction);
-
-      const sendRes = await fetch(`${TW_BASE_URL}/helper/send-transaction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ xdr: signedXdr }),
-      });
-
-      const sendPayload = (await sendRes.json().catch(() => ({}))) as {
-        error?: string;
-        message?: string;
-      };
-
-      if (!sendRes.ok) {
-        throw new Error(sendPayload.error ?? sendPayload.message ?? "Failed to broadcast transaction.");
+      // 2. Connect wallet if needed
+      let walletAddress = "";
+      try {
+        walletAddress = await connectWallet();
+      } catch {
+        throw new Error("Please connect your wallet to mark treatment as done.");
       }
 
-      if (!auth.token) throw new Error("Authentication token lost.");
+      // 3. Sign transaction on TESTNET
+      const signedXdr = await signTransaction({
+        unsignedTransaction: twPayload.unsignedTransaction,
+        address: walletAddress,
+      });
 
+      // 4. Send to Trustless Work
+      await sendSignedTransaction(signedXdr);
+
+      // 5. Update our backend
       const markRes = await fetch("/api/mark-treatment-done", {
         method: "POST",
         headers: {
@@ -128,11 +123,7 @@ export function MarkTreatmentDoneButton({
         body: JSON.stringify({ caseId, contractId, milestoneIndex: 0 }),
       });
 
-      const markPayload = (await markRes.json().catch(() => ({}))) as {
-        error?: string;
-        case?: { status: string };
-      };
-
+      const markPayload = await markRes.json();
       if (!markRes.ok || !markPayload.case) {
         throw new Error(markPayload.error ?? "Failed to mark treatment as delivered.");
       }

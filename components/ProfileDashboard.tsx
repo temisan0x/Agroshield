@@ -6,10 +6,9 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notifyAuthChange } from "@/lib/auth-client";
 import {
-  connectFreighterWallet,
-  disconnectFreighterWallet,
-  getExpectedWalletNetworkLabel,
-} from "@/lib/freighter-wallet";
+  connectWallet,
+  disconnectWallet,
+} from "@/lib/walletKit";
 import { ProfileSkeleton } from "./Skeleton";
 
 type ProfileItem = {
@@ -361,8 +360,7 @@ export default function ProfileDashboard() {
     }
 
     try {
-      const access = await connectFreighterWallet();
-      const address = typeof access === "string" ? access : access.address;
+      const address = await connectWallet();
 
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
@@ -411,7 +409,7 @@ export default function ProfileDashboard() {
         throw new Error("No connected wallet to disconnect.");
       }
 
-      await disconnectFreighterWallet(currentWalletAddress);
+      await disconnectWallet();
 
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
@@ -1014,9 +1012,7 @@ export default function ProfileDashboard() {
                 <p className="text-xs text-neutral-400">
                   Freighter will ask you to confirm the active wallet on every
                   connect and disconnect.
-                  {getExpectedWalletNetworkLabel() !== "any Stellar network"
-                    ? ` Expected network: ${getExpectedWalletNetworkLabel()}.`
-                    : ""}
+                  Expected network: Testnet.
                 </p>
               </section>
             </aside>

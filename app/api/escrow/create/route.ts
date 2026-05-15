@@ -91,32 +91,24 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const platformAddress = process.env.PLATFORM_WALLET_ADDRESS ?? farmer.walletAddress;
+
     const deployResponse = await deployEscrow({
-      signer: farmer.walletAddress,
       engagementId: caseId,
       title: `AgroShield: ${diseaseName}`,
       description: `Crop treatment escrow for ${diseaseName}`,
-      amount: Number(bid.amount),
-      platformFee: 1,
-      roles: {
-        approver: farmer.walletAddress,
-        serviceProvider: vendor.walletAddress,
-        platformAddress:
-          process.env.PLATFORM_WALLET_ADDRESS ?? farmer.walletAddress,
-        releaseSigner: farmer.walletAddress,
-        disputeResolver:
-          process.env.PLATFORM_WALLET_ADDRESS ?? farmer.walletAddress,
-        receiver: vendor.walletAddress,
-      },
-      trustline: {
-        address:
-          process.env.TRUSTLESS_WORK_TRUSTLINE_ADDRESS ??
-          "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
-        symbol: process.env.TRUSTLESS_WORK_TRUSTLINE_SYMBOL ?? "USDC",
-      },
+      approver: farmer.walletAddress,
+      serviceProvider: vendor.walletAddress,
+      releaseSigner: farmer.walletAddress,
+      receiver: vendor.walletAddress,
+      platformAddress,
+      disputeResolver: platformAddress,
+      amount: String(bid.amount),
+      platformFee: "1",
       milestones: [
         {
           description: "Treatment delivered and confirmed",
+          amount: String(bid.amount)
         },
       ],
     });

@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, useReducedMotion, AnimatePresence } from "motion/react";
+import { useRouter } from "next/navigation";
 import type { BidOnCase, CaseDetailData } from "./types";
 import { deriveBidStatus } from "./types";
 import BidModal from "./BidModal";
 import BidRow from "./BidRow";
-import { signTransaction, isConnected } from "@stellar/freighter-api";
+import { signTransaction, connectWallet } from "@/lib/walletKit";
+import { sendSignedTransaction } from "@/lib/trustlesswork";
 import RaiseDisputeButton from "../dispute/RaiseDisputeButton";
 import { MarkTreatmentDoneButton } from "./MarkTreatmentDoneButton";
 
@@ -16,9 +18,10 @@ interface CaseDetailProps {
 }
 
 export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProps) {
+  const router = useRouter();
   const reduceMotion = useReducedMotion();
   const [caseData, setCaseData] = useState<CaseDetailData | null>(null);
-  const [caseStatus, setCaseStatus] = useState<string | null>(null); // ← null until data arrives
+  const [caseStatus, setCaseStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bidOpen, setBidOpen] = useState(false);
@@ -29,6 +32,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   const [userWalletAddress, setUserWalletAddress] = useState<string | null>(null);
   const [walletChecking, setWalletChecking] = useState(true);
   const [releasingFunds, setReleasingFunds] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<"FARMER" | "VENDOR" | null>(viewerRole === "VENDOR" ? null : (viewerRole as "FARMER" | "VENDOR"));
 
   const fetchCase = useCallback(async () => {
@@ -38,7 +42,6 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
       const data = await res.json();
       const fetched: CaseDetailData | null = data.case ?? null;
       setCaseData(fetched);
-      // ← Sync caseStatus every time we (re)fetch — including the initial load
       if (fetched) setCaseStatus(fetched.status);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -48,25 +51,19 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   }, [id]);
 
   useEffect(() => {
-    queueMicrotask(() => {
-      void fetchCase();
-    });
-  }, [fetchCase]);
+    void fetchCase();
 
-  useEffect(() => {
     async function checkWallet() {
       try {
-        const token = localStorage.getItem("agroshield_token");
-        if (!token) { setWalletChecking(false); return; }
-        const res = await fetch("/api/profile/summary", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setUserWalletAddress(data?.profile?.user?.walletAddress ?? null);
+        const { isConnected, getAddress } = await import("@stellar/freighter-api");
+        const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
+        const walletConnected = typeof freighterReady === "boolean" ? freighterReady : freighterReady.isConnected;
+        if (walletConnected) {
+          const { address } = await getAddress();
+          setUserWalletAddress(address);
         }
       } catch {
-        // Ignore — wallet address just won't show
+        // Ignore wallet detection errors
       } finally {
         setWalletChecking(false);
       }
@@ -74,7 +71,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
     checkWallet();
 
     async function checkRole() {
-      if (viewerRole !== "VENDOR") return; // If explicitly passed, don't override
+      if (viewerRole !== "VENDOR") return;
       try {
         const token = localStorage.getItem("agroshield_token");
         if (!token) return;
@@ -83,6 +80,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
         });
         if (res.ok) {
           const data = await res.json();
+          setCurrentUserId(data?.user?.id ?? null);
           setCurrentUserRole(data?.user?.role ?? "VENDOR");
         }
       } catch {
@@ -90,7 +88,169 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
       }
     }
     checkRole();
-  }, [viewerRole]);
+  }, [id, fetchCase, viewerRole]);
+
+  const handleAcceptBid = async (bid: BidOnCase) => {
+    setAcceptingBidId(bid.id);
+    setEscrowError(null);
+    setEscrowNotice(null);
+
+    try {
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) throw new Error("Please log in again to continue.");
+
+      // Ensure wallet is connected using our new kit
+      let walletAddress = userWalletAddress;
+      if (!walletAddress) {
+        walletAddress = await connectWallet();
+        setUserWalletAddress(walletAddress);
+      }
+
+      const createRes = await fetch("/api/escrow/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ caseId: id, bidId: bid.id }),
+      });
+
+      const createData = await createRes.json();
+      if (!createRes.ok || !createData.unsignedTransaction || !createData.escrowId) {
+        throw new Error(createData.error ?? "Failed to create escrow.");
+      }
+
+      // Sign with our new kit on TESTNET
+      const signedTxXdr = await signTransaction({
+        unsignedTransaction: createData.unsignedTransaction,
+        address: walletAddress,
+      });
+
+      // Send to Trustless Work
+      const txResult = await sendSignedTransaction(signedTxXdr);
+      const contractId = txResult.contractId || txResult.result?.contractId || txResult.data?.contractId;
+
+      if (!contractId) {
+        throw new Error("Failed to extract contractId from TW response.");
+      }
+
+      // Confirm with our backend
+      const confirmRes = await fetch("/api/escrow/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ escrowId: createData.escrowId, bidId: bid.id, contractId }),
+      });
+
+      if (!confirmRes.ok) {
+        const confirmData = await confirmRes.json().catch(() => ({}));
+        throw new Error(confirmData.error ?? "Failed to confirm escrow deployment.");
+      }
+
+      setEscrowNotice("Escrow deployed! Fund it with USDC to start the contract.");
+      await fetchCase();
+    } catch (err) {
+      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setAcceptingBidId(null);
+    }
+  };
+
+  const handleFundEscrow = async () => {
+    if (!caseData?.escrow) return;
+
+    setEscrowError(null);
+    setEscrowNotice(null);
+    setFundingEscrow(true);
+
+    try {
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) throw new Error("Please log in again to continue.");
+
+      let walletAddress = userWalletAddress;
+      if (!walletAddress) {
+        walletAddress = await connectWallet();
+        setUserWalletAddress(walletAddress);
+      }
+
+      const fundRes = await fetch("/api/escrow/fund", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ escrowId: caseData.escrow.id }),
+      });
+
+      const fundData = await fundRes.json();
+      if (!fundRes.ok || !fundData.unsignedTransaction) {
+        throw new Error(fundData.error ?? "Failed to create funding transaction.");
+      }
+
+      // Sign with our new kit
+      const signedTxXdr = await signTransaction({
+        unsignedTransaction: fundData.unsignedTransaction,
+        address: walletAddress,
+      });
+
+      // Send to Trustless Work
+      await sendSignedTransaction(signedTxXdr);
+
+      // Confirm with our backend
+      const confirmRes = await fetch("/api/escrow/fund/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ escrowId: caseData.escrow.id }),
+      });
+
+      if (!confirmRes.ok) {
+        const confirmData = await confirmRes.json().catch(() => ({}));
+        throw new Error(confirmData.error ?? "Failed to confirm funding.");
+      }
+
+      setEscrowNotice("Escrow funded! Treatment can now begin.");
+      await fetchCase();
+    } catch (err) {
+      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setFundingEscrow(false);
+    }
+  };
+
+  const handleReleaseFunds = async () => {
+    if (!caseData?.escrow?.contractId) return;
+    setReleasingFunds(true);
+    setEscrowError(null);
+
+    try {
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) throw new Error("Please log in again to continue.");
+
+      let walletAddress = userWalletAddress;
+      if (!walletAddress) {
+        walletAddress = await connectWallet();
+        setUserWalletAddress(walletAddress);
+      }
+
+      const res = await fetch("/api/escrow/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ contractId: caseData.escrow.contractId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.unsignedTransaction) {
+        throw new Error(data.error ?? "Failed to create release transaction.");
+      }
+
+      const signedTxXdr = await signTransaction({
+        unsignedTransaction: data.unsignedTransaction,
+        address: walletAddress,
+      });
+
+      await sendSignedTransaction(signedTxXdr);
+
+      setEscrowNotice("Funds released successfully! Case complete.");
+      await fetchCase();
+    } catch (err) {
+      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setReleasingFunds(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -102,27 +262,6 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
               <div className="h-4 w-24 rounded-full bg-stone-200/40" />
               <div className="h-10 w-3/4 rounded-2xl bg-stone-200/40" />
               <div className="h-4 w-1/2 rounded-full bg-stone-200/40" />
-              <div className="grid gap-3 pt-4 sm:grid-cols-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-20 rounded-xl bg-stone-200/40" />
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="p-6">
-              <div className="flex gap-2">
-                <div className="h-6 w-16 rounded-full bg-stone-200/40" />
-                <div className="h-6 w-16 rounded-full bg-stone-200/40" />
-              </div>
-              <div className="mt-4 h-6 w-1/2 rounded-full bg-stone-200/40" />
-              <div className="mt-2 h-4 w-full rounded-full bg-stone-200/40" />
-              <div className="mt-5 h-12 w-full rounded-xl bg-stone-200/40" />
-              <div className="my-5 border-t border-neutral-100/50" />
-              <div className="space-y-3">
-                <div className="h-4 w-full rounded-full bg-stone-200/40" />
-                <div className="h-4 w-full rounded-full bg-stone-200/40" />
-              </div>
             </div>
           </div>
         </div>
@@ -130,580 +269,238 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
     );
   }
 
-  if (error || !caseData || caseStatus === null) {
+  if (!caseData) {
     return (
-      <div className="mx-auto max-w-md py-32 text-center">
-        <div className="rounded-2xl border border-red-200 p-6 py-8">
-          <p className="text-sm font-semibold text-red-700">Error</p>
-          <p className="mt-1 text-xs text-red-500">{error ?? "Case not found"}</p>
-          <button
-            onClick={() => { setError(null); setLoading(true); fetchCase(); }}
-            className="mt-4 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-          >
-            Retry
-          </button>
-        </div>
+      <div className="py-20 text-center">
+        <p className="text-neutral-500">Case not found.</p>
       </div>
     );
   }
 
-  const disease = caseData.diagnosis?.disease ?? "Undiagnosed";
-  const confidence = caseData.diagnosis?.confidence;
-  const confidencePercent = (() => {
-    if (confidence == null) return null;
-    const numeric = Number(confidence);
-    if (Number.isNaN(numeric)) return null;
-    const percent = numeric <= 1 ? numeric * 100 : numeric;
-    return Math.max(0, Math.min(100, Math.round(percent)));
-  })();
-  const description = caseData.diagnosis?.description ?? caseData.diagnosis?.treatment;
-  const location = (caseData.diagnosis as { location?: string } | null)?.location ?? "Not shared";
-  const cropType = (caseData.diagnosis as { crop?: string } | null)?.crop ?? "Not specified";
-  const date = new Date(caseData.createdAt).toLocaleDateString("en-NG", {
-    month: "long", day: "numeric", year: "numeric",
-  });
-  const expectedWalletAddress = userWalletAddress ?? caseData.farmer.walletAddress;
-
-  const handleAcceptBid = async (bid: BidOnCase) => {
-    setEscrowError(null);
-    setEscrowNotice(null);
-    setAcceptingBidId(bid.id);
-
-    try {
-      const token = localStorage.getItem("agroshield_token");
-      if (!token) throw new Error("Please log in again to continue.");
-
-      const { isConnected, signTransaction } = await import("@stellar/freighter-api");
-      const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
-      const walletConnected =
-        typeof freighterReady === "boolean" ? freighterReady : freighterReady.isConnected;
-      if (!walletConnected) {
-        throw new Error("Connect Freighter before accepting this bid.");
-      }
-
-      const createRes = await fetch("/api/escrow/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ caseId: caseData.id, bidId: bid.id }),
-      });
-
-      const createData = (await createRes.json()) as {
-        unsignedTransaction?: string;
-        escrowId?: string;
-        error?: string;
-      };
-
-      if (!createRes.ok || !createData.unsignedTransaction || !createData.escrowId) {
-        throw new Error(createData.error ?? "Failed to create escrow.");
-      }
-
-      const signedXdr = await signTransaction(createData.unsignedTransaction);
-      const signedTxXdr = (signedXdr as { signedTxXdr?: string }).signedTxXdr;
-      const signerAddress = (signedXdr as { signerAddress?: string }).signerAddress ?? "";
-      const signError = (signedXdr as { error?: { message?: string } }).error;
-
-      if (signError || !signedTxXdr) {
-        throw new Error(signError?.message ?? "Failed to sign the deploy transaction.");
-      }
-
-      if (expectedWalletAddress && signerAddress && signerAddress !== expectedWalletAddress) {
-        throw new Error("Please sign with the farmer wallet connected to this case.");
-      }
-
-      const confirmRes = await fetch("/api/escrow/confirm", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          escrowId: createData.escrowId,
-          bidId: bid.id,
-          signedXdr: signedTxXdr,
-        }),
-      });
-
-      const confirmData = (await confirmRes.json().catch(() => ({}))) as {
-        contractId?: string;
-        error?: string;
-      };
-
-      if (!confirmRes.ok) {
-        throw new Error(confirmData.error ?? "Failed to confirm escrow deployment.");
-      }
-
-      setEscrowNotice("Escrow deployed. Fund it with USDC to start the contract.");
-      await fetchCase();
-    } catch (err) {
-      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setAcceptingBidId(null);
-    }
-  };
-
-  const handleFundEscrow = async () => {
-    if (!caseData.escrow) {
-      return;
-    }
-
-    setEscrowError(null);
-    setEscrowNotice(null);
-    setFundingEscrow(true);
-
-    try {
-      const token = localStorage.getItem("agroshield_token");
-      if (!token) {
-        throw new Error("Please log in again to continue.");
-      }
-
-      const { isConnected, signTransaction } = await import("@stellar/freighter-api");
-      const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
-      const walletConnected =
-        typeof freighterReady === "boolean" ? freighterReady : freighterReady.isConnected;
-      if (!walletConnected) {
-        throw new Error("Connect Freighter before funding the escrow.");
-      }
-
-      const fundRes = await fetch("/api/escrow/fund", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ escrowId: caseData.escrow.id }),
-      });
-
-      const fundData = (await fundRes.json().catch(() => ({}))) as {
-        unsignedTransaction?: string;
-        error?: string;
-      };
-
-      if (! fundRes.ok || !fundData.unsignedTransaction) {
-        throw new Error(fundData.error ?? "Failed to create funding transaction.");
-      }
-
-      const signedXdr = await signTransaction(fundData.unsignedTransaction);
-      const signedTxXdr = (signedXdr as { signedTxXdr?: string }).signedTxXdr;
-      const signerAddress = (signedXdr as { signerAddress?: string }).signerAddress ?? "";
-      const signError = (signedXdr as { error?: { message?: string } }).error;
-
-      if (signError || !signedTxXdr) {
-        throw new Error(signError?.message ?? "Failed to sign the funding transaction.");
-      }
-
-      if (expectedWalletAddress && signerAddress && signerAddress !== expectedWalletAddress) {
-        throw new Error("Please sign with the farmer wallet connected to this case.");
-      }
-
-      const confirmRes = await fetch("/api/escrow/fund/confirm", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          escrowId: caseData.escrow.id,
-          signedXdr: signedTxXdr,
-        }),
-      });
-
-      const confirmData = (await confirmRes.json().catch(() => ({}))) as {
-        error?: string;
-      };
-
-      if (!confirmRes.ok) {
-        throw new Error(confirmData.error ?? "Failed to confirm escrow funding.");
-      }
-
-      setEscrowNotice("Escrow funded. The USDC is now locked in Trustless Work.");
-      await fetchCase();
-    } catch (err) {
-      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setFundingEscrow(false);
-    }
-  };
-
-
-  const handleReleasePayment = async () => {
-    if (!caseData.escrow) return;
-    setEscrowError(null);
-    setEscrowNotice(null);
-    setReleasingFunds(true);
-
-    try {
-      const token = localStorage.getItem("agroshield_token");
-      if (!token) throw new Error("Please log in again to continue.");
-
-      // Check Freighter
-      const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
-      const walletConnected =
-        typeof freighterReady === "boolean" ? freighterReady : freighterReady.isConnected;
-      if (!walletConnected) {
-        throw new Error("Please install or enable Freighter wallet to continue.");
-      }
-
-      const res = await fetch("/api/escrow/release", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ escrowId: caseData.escrow.id }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to initiate release");
-
-      const signedXdr = await signTransaction(data.unsignedTransaction, {
-        networkPassphrase: "Test SDF Network ; September 2015",
-      });
-
-      if (typeof signedXdr === "object" && "error" in signedXdr) {
-        throw new Error((signedXdr as any).error.message || "Transaction was rejected in Freighter");
-      }
-
-      const signedTxXdr =
-        typeof signedXdr === "string"
-          ? signedXdr
-          : (signedXdr as any).signedTxXdr || (signedXdr as any).signedTransaction;
-
-      const sendRes = await fetch("https://dev.api.trustlesswork.com/helper/send-transaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signedXdr: signedTxXdr }),
-      });
-
-      if (!sendRes.ok) throw new Error("Failed to send release transaction");
-
-      setEscrowNotice("Payment released successfully.");
-      await fetchCase();
-    } catch (err) {
-      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setReleasingFunds(false);
-    }
-  };
-
-  const statusLabel = caseStatus.replace(/_/g, " ");
-  const isOpen = caseStatus === "OPEN";
-  const assignedVendorId =
-    caseData.assignedVendorId ??
-    caseData.bids.find((bid) => bid.selected)?.vendorId ??
-    null;
+  const diagnosis = caseData.diagnosis;
+  const disease = diagnosis?.disease ?? "Unknown Condition";
+  const confidence = diagnosis?.confidence ? Math.round(diagnosis.confidence * 100) : null;
+  const urgency = String(diagnosis?.urgency ?? "NORMAL").toUpperCase();
+  const isOpen = caseData.status === "OPEN";
 
   return (
-    <div>
-      {/* Dispute Banners */}
-      {caseData.status === "DISPUTED" && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-3 mb-6">
-          <div className="text-yellow-600 mt-0.5 text-lg">⚠️</div>
-          <div>
-            <p className="text-sm font-semibold text-yellow-800">Dispute in Progress</p>
-            <p className="text-xs text-yellow-700 mt-0.5">
-              The farmer has raised a dispute on this case. Our team is reviewing it and will resolve
-              within 48 hours.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {caseData.status === "RESOLVED" && caseData.dispute && (
-        <div className="bg-green-50 border border-green-100 rounded-xl p-4 flex items-start gap-3 mb-6">
-          <div className="text-green-600 mt-0.5 text-lg">✅</div>
-          <div>
-            <p className="text-sm font-semibold text-green-800">Dispute Resolved</p>
-          </div>
-        </div>
-      )}
-
-      {!walletChecking && !userWalletAddress ? (
-        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 text-amber-600">⚠️</div>
-            <div>
-              <p className="text-sm font-semibold text-amber-800">Wallet not connected</p>
-              <p className="mt-1 text-xs text-amber-700">
-                {viewerRole === "VENDOR"
-                  ? "Connect your Freighter wallet before accepting bids to enable escrow transactions."
-                  : "Your wallet is not connected. Connect your Freighter wallet to receive escrow payouts."}
-              </p>
+    <div className="mx-auto w-full max-w-5xl">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_380px]">
+        {/* Main Content */}
+        <div className="space-y-10">
+          <section>
+            <div className="aspect-[4/3] overflow-hidden rounded-[32px] bg-neutral-200 shadow-xl">
+              <img
+                src={caseData.imageUrl}
+                alt={disease}
+                className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
+              />
             </div>
-          </div>
-        </div>
-      ) : null}
+          </section>
 
-      <motion.div
-        initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]"
-      >
-        <div>
-          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-neutral-100">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={caseData.imageUrl} alt={disease} className="h-full w-full object-cover" />
-            {/* ← Reads from caseStatus so it updates after mark-done */}
-            <span
-              className={`absolute left-4 top-4 rounded-full border px-3 py-1 text-xs font-medium ${
-                isOpen
-                  ? "bg-blue-50 text-blue-600 border-blue-100"
-                  : "bg-yellow-50 text-yellow-700 border-yellow-100"
-              }`}
-            >
-              {isOpen ? "Open" : statusLabel}
-            </span>
-          </div>
+          <section>
+            <div className="flex items-center gap-3">
+              <span className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest text-white ${
+                urgency === "HIGH" ? "bg-red-500 shadow-lg shadow-red-200" : "bg-green-500 shadow-lg shadow-green-200"
+              }`}>
+                {urgency}
+              </span>
+              <span className="rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-bold tracking-widest text-neutral-500">
+                {caseData.status}
+              </span>
+            </div>
 
-          <div className="mt-6">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-neutral-400">
-              Case details
-            </p>
-            <h1 className="font-[family-name:var(--font-manrope)] text-3xl font-extrabold text-neutral-900">
+            <h1 className="mt-4 font-[family-name:var(--font-manrope)] text-4xl font-extrabold tracking-tight text-neutral-900">
               {disease}
             </h1>
 
-            {confidencePercent != null && (
-              <div className="mt-3 flex items-center gap-3">
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${confidencePercent}%` }}
-                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                    className="h-full rounded-full bg-green-500"
-                  />
-                </div>
-                <span className="whitespace-nowrap text-sm font-semibold text-neutral-700">
-                  {confidencePercent}% confidence
-                </span>
-              </div>
-            )}
-
-            {description ? (
-              <div className="mt-4 rounded-xl border border-green-100 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-green-700">
-                  Recommended treatment
-                </p>
-                <p className="mt-1 text-sm text-green-900">{description}</p>
-              </div>
-            ) : null}
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <MetaCell label="Farmer" value={maskEmail(caseData.farmer.email)} />
-              <MetaCell label="Submitted" value={date} />
-              <MetaCell label="Location" value={location} />
-              <MetaCell label="Crop Type" value={cropType} />
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <MetaCell label="Confidence" value={confidence ? `${confidence}%` : "N/A"} icon="🎯" />
+              <MetaCell label="Farmer" value={caseData.farmer.email} icon="👤" />
+              <MetaCell label="Submitted" value={new Date(caseData.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} icon="📅" />
+              <MetaCell label="Location" value={(diagnosis as any)?.location ?? "Location on file"} icon="📍" />
             </div>
-          </div>
+          </section>
+
+          <section className="space-y-4">
+            <h3 className="font-[family-name:var(--font-manrope)] text-xl font-bold text-neutral-900">
+              Assessment & Treatment
+            </h3>
+            <div className="space-y-6 text-sm leading-relaxed text-neutral-600">
+              <div>
+                <p className="font-semibold text-neutral-800">Observation</p>
+                <p className="mt-1">{diagnosis?.description ?? "No detailed description available."}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-neutral-800">Recommended Steps</p>
+                <p className="mt-1">{diagnosis?.treatment ?? "Waiting for vendor proposal."}</p>
+              </div>
+            </div>
+          </section>
         </div>
 
-        {/* ─── Sidebar ─────────────────────────────────────────────────── */}
-        <div className="lg:sticky lg:top-6">
-          <div className="rounded-[32px] bg-white/40 border border-white/20 p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-md">
-            <div className="flex flex-wrap gap-2">
-              <span
-                className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                  String(caseData.diagnosis?.urgency ?? "MEDIUM").toUpperCase().startsWith("H")
-                    ? "bg-red-50 text-red-600 border-red-100"
-                    : String(caseData.diagnosis?.urgency ?? "MEDIUM").toUpperCase().startsWith("L")
-                      ? "bg-green-50 text-green-700 border-green-100"
-                      : "bg-yellow-50 text-yellow-700 border-yellow-100"
-                }`}
-              >
-                {String(caseData.diagnosis?.urgency ?? "MEDIUM").toUpperCase()}
-              </span>
-              {/* ← Also reads from caseStatus */}
-              <span
-                className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                  isOpen
-                    ? "bg-blue-50 text-blue-600 border-blue-100"
-                    : "bg-yellow-50 text-yellow-700 border-yellow-100"
-                }`}
-              >
-                {isOpen ? "Open" : statusLabel}
-              </span>
-            </div>
+        {/* Sidebar */}
+        <aside className="lg:sticky lg:top-32 h-fit">
+          <div className="rounded-[32px] bg-white/40 p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-md border border-white/20">
+            {isOpen && currentUserRole === "VENDOR" ? (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-neutral-800">Ready to treat this case?</p>
+                  <p className="mt-1 text-xs text-neutral-500">Submit your proposal with pricing and delivery time.</p>
+                </div>
+                <button
+                  onClick={() => setBidOpen(true)}
+                  className="w-full rounded-full bg-neutral-900 py-4 text-sm font-bold text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-neutral-800 active:scale-[0.98]"
+                >
+                  Submit a Bid
+                </button>
+                <div className="flex items-center justify-between border-t border-neutral-100 pt-6">
+                  <div className="text-center flex-1 border-r border-neutral-100">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Current Bids</p>
+                    <p className="mt-1 text-lg font-bold text-neutral-900">{caseData.bids.length}</p>
+                  </div>
+                  <div className="text-center flex-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Posted</p>
+                    <p className="mt-1 text-lg font-bold text-neutral-900">
+                      {new Date(caseData.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : caseData.escrow ? (
+              <div className="space-y-6">
+                <div className="rounded-2xl bg-white/60 p-5 text-center">
+                  <p className="text-xs font-bold uppercase tracking-widest text-neutral-400">Escrow Status</p>
+                  <p className="mt-1 font-bold text-neutral-900">{caseData.escrow.status.replace(/_/g, " ")}</p>
+                </div>
 
-            <h2 className="mt-4 font-[family-name:var(--font-manrope)] text-lg font-bold text-neutral-900">
-              Ready to treat this case?
-            </h2>
-            <p className="mt-1 text-sm text-neutral-500">
-              Submit your proposal with pricing and delivery time.
-            </p>
+                {caseData.escrow.status === "AWAITING_FUNDING" && (currentUserRole === "FARMER" || viewerRole === "FARMER") && (
+                  <button
+                    onClick={handleFundEscrow}
+                    disabled={fundingEscrow}
+                    className="w-full rounded-full bg-green-600 py-4 text-sm font-bold text-white shadow-lg transition hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {fundingEscrow ? "Processing..." : "Fund Escrow (USDC)"}
+                  </button>
+                )}
 
-            {isOpen && viewerRole === "VENDOR" ? (
-              <button
-                type="button"
-                onClick={() => setBidOpen(true)}
-                className="mt-6 w-full rounded-full bg-neutral-900 py-4 text-sm font-semibold text-white transition-all hover:bg-neutral-800 hover:shadow-lg active:scale-[0.98]"
-              >
-                Submit a Bid
-              </button>
+                {caseData.escrow.status === "DEPOSITED" && (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl bg-green-50 p-4 text-center">
+                      <p className="text-xs font-semibold text-green-700">Funds secured in Escrow</p>
+                    </div>
+                    {currentUserRole === "VENDOR" && (
+                      <MarkTreatmentDoneButton 
+                        caseId={id} 
+                        contractId={caseData.escrow.contractId!}
+                        onSuccess={fetchCase}
+                      />
+                    )}
+                    {(currentUserRole === "FARMER" || viewerRole === "FARMER") && (
+                      <button
+                        onClick={handleReleaseFunds}
+                        disabled={releasingFunds}
+                        className="w-full rounded-full bg-neutral-900 py-4 text-sm font-bold text-white shadow-xl transition hover:bg-neutral-800 disabled:opacity-50"
+                      >
+                        {releasingFunds ? "Releasing..." : "Release Funds to Vendor"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : (
-              <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-500">
-                This case is not accepting new bids.
+              <div className="py-4 text-center">
+                <p className="text-sm font-medium text-neutral-500">Case is {caseData.status.toLowerCase()}</p>
               </div>
             )}
 
-            {/* ─── Mark Treatment Done — only renders when conditions are met ── */}
-            <div className="mt-3">
-              <MarkTreatmentDoneButton
-                caseId={caseData.id}
-                assignedVendorId={assignedVendorId}
-                currentStatus={caseStatus}
-                onSuccess={(newStatus) => setCaseStatus(newStatus)}
-              />
-            </div>
-
-            <div className="my-5 border-t border-neutral-100" />
-
-            <div className="flex flex-col gap-4 text-xs font-medium uppercase tracking-wider text-neutral-400">
-              <div className="flex items-center justify-between border-b border-neutral-100/50 pb-3">
-                <span>Current Bids</span>
-                <span className="text-base font-bold text-neutral-900">{caseData.bids.length}</span>
+            {escrowError && (
+              <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-600 border border-red-100">
+                {escrowError}
               </div>
-              <div className="flex items-center justify-between">
-                <span>Posted On</span>
-                <span className="text-sm font-bold text-neutral-900">{date}</span>
+            )}
+            {escrowNotice && (
+              <div className="mt-4 rounded-xl bg-green-50 p-3 text-xs text-green-600 border border-green-100">
+                {escrowNotice}
               </div>
-            </div>
-
-            {viewerRole === "FARMER" && caseData.escrow && caseData.escrow.contractId && caseData.escrow.status !== "FUNDED" ? (
-              <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50 p-4">
-                <p className="text-sm font-semibold text-sky-900">Fund escrow with testnet USDC</p>
-                <p className="mt-1 text-xs leading-5 text-sky-700">
-                  The deploy step only creates the contract. You still need to fund it with USDC before work can begin.
-                </p>
-                <a
-                  href="https://docs.trustlesswork.com/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 inline-flex text-xs font-semibold text-sky-800 underline underline-offset-4"
-                >
-                  How to get testnet tokens
-                </a>
-                <button
-                  type="button"
-                  onClick={handleFundEscrow}
-                  disabled={fundingEscrow}
-                  className="mt-4 w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {fundingEscrow ? "Funding..." : "Fund Escrow"}
-                </button>
-              </div>
-            ) : null}
-
-            {viewerRole === "FARMER" &&
-            (caseData.status === "IN_PROGRESS" || caseData.status === "DELIVERED") ? (
-              <div className="mt-5 flex flex-col gap-3">
-                <button
-                  onClick={handleReleasePayment}
-                  disabled={releasingFunds}
-                  className="w-full rounded-full bg-neutral-900 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
-                >
-                  {releasingFunds ? "Processing..." : "Confirm & Release Payment"}
-                </button>
-
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-neutral-100" />
-                  <span className="text-xs text-neutral-400">or</span>
-                  <div className="h-px flex-1 bg-neutral-100" />
-                </div>
-
-                <RaiseDisputeButton
-                  caseId={caseData.id}
-                  escrowContractId={caseData.escrow?.contractId || ""}
-                  farmerWalletAddress={caseData.farmer.walletAddress || ""}
-                  onDisputeRaised={() => fetchCase()}
-                />
-              </div>
-            ) : null}
+            )}
           </div>
-        </div>
-      </motion.div>
 
-      {/* ─── Bids list ───────────────────────────────────────────────────── */}
-      <div className="mt-10">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-[family-name:var(--font-manrope)] text-xl font-bold text-neutral-900">
-            Bids on this case
-          </h3>
-          <span className="text-sm text-neutral-500">
-            {caseData.bids.length} bid{caseData.bids.length !== 1 ? "s" : ""} submitted
+          <div className="mt-6 px-4">
+            <RaiseDisputeButton caseId={id} onDisputeRaised={fetchCase} />
+          </div>
+        </aside>
+      </div>
+
+      {/* Bids List */}
+      <div className="mt-16">
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="font-[family-name:var(--font-manrope)] text-2xl font-bold text-neutral-900">
+            Market Proposals
+          </h2>
+          <span className="text-xs font-bold uppercase tracking-widest text-neutral-400">
+            {caseData.bids.length} Received
           </span>
         </div>
 
-        {caseData.bids.length > 0 ? (
-          <div className="flex flex-col gap-3">
-            {caseData.bids.map((bid, i) => {
-              const status = deriveBidStatus(bid.selected, caseData.status);
-              const amount = `$${Number(bid.amount).toFixed(2)}`;
+        <div className="grid gap-4">
+          {caseData.bids.map((bid, i) => {
+            const status = deriveBidStatus(bid.selected, caseData.status);
+            const amount = `$${Number(bid.amount).toFixed(2)}`;
 
-              return (
-                <div key={bid.id} className="rounded-2xl border border-neutral-200/60 p-5 shadow-sm transition hover:bg-white/30">
-                  <BidRow
-                    title={bid.vendor.email}
-                    subtitle={bid.proposal}
-                    amount={amount}
-                    status={status}
-                    index={i}
-                    action={
-                      (viewerRole === "FARMER" || currentUserRole === "FARMER") && isOpen && !bid.selected ? (
-                        <button
-                          type="button"
-                          onClick={() => handleAcceptBid(bid)}
-                          disabled={acceptingBidId === bid.id}
-                          className="rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                          {acceptingBidId === bid.id ? "Accepting..." : "Accept"}
-                        </button>
-                      ) : null
-                    }
-                  />
-                </div>
-              );
-            })}
-            {escrowError ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
-                {escrowError}
-              </div>
-            ) : null}
-            {escrowNotice ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                {escrowNotice}
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-neutral-200 p-10 text-center">
-            <div className="text-3xl">🤝</div>
-            <p className="mt-3 text-sm font-semibold text-neutral-900">No bids yet</p>
-            <p className="mt-1 text-xs text-neutral-500">Be the first to submit a proposal</p>
-          </div>
-        )}
+            return (
+              <BidRow
+                key={bid.id}
+                title={bid.vendor.email}
+                subtitle={bid.proposal}
+                amount={amount}
+                status={status}
+                index={i}
+                action={
+                  (viewerRole === "FARMER" || currentUserRole === "FARMER") &&
+                  currentUserId === caseData.farmer.id &&
+                  isOpen && !bid.selected ? (
+                    <button
+                      onClick={() => handleAcceptBid(bid)}
+                      disabled={acceptingBidId === bid.id}
+                      className="rounded-full bg-neutral-900 px-4 py-1.5 text-xs font-bold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+                    >
+                      {acceptingBidId === bid.id ? "..." : "Accept"}
+                    </button>
+                  ) : null
+                }
+              />
+            );
+          })}
+          {caseData.bids.length === 0 && (
+            <div className="rounded-[32px] border border-dashed border-neutral-200 py-20 text-center">
+              <p className="text-sm text-neutral-400 font-medium">Awaiting first vendor proposal</p>
+            </div>
+          )}
+        </div>
       </div>
 
       <AnimatePresence>
-        {bidOpen && viewerRole === "VENDOR" && (
-          <BidModal caseId={id} onClose={() => setBidOpen(false)} onSuccess={() => { fetchCase(); }} />
+        {bidOpen && (
+          <BidModal 
+            caseId={id} 
+            onClose={() => setBidOpen(false)} 
+            onSuccess={fetchCase} 
+          />
         )}
       </AnimatePresence>
     </div>
   );
 }
 
-function MetaCell({ label, value }: { label: string; value: string }) {
+function MetaCell({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200/50 p-4">
-      <p className="text-xs font-medium uppercase tracking-[0.15em] text-neutral-400">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-neutral-800">{value}</p>
+    <div className="flex items-center gap-3 rounded-2xl bg-white/50 px-5 py-4 shadow-sm border border-white/20">
+      <span className="text-lg">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">{label}</p>
+        <p className="truncate text-sm font-bold text-neutral-800">{value}</p>
+      </div>
     </div>
   );
-}
-
-function maskEmail(value: string) {
-  const [name, domain] = value.split("@");
-  if (!name || !domain) return value;
-  if (name.length <= 2) return `••@${domain}`;
-  return `${name.slice(0, 2)}•••@${domain}`;
 }

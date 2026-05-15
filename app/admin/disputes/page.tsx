@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { signTransaction, isConnected } from "@stellar/freighter-api";
+import { signTransaction, connectWallet } from "@/lib/walletKit";
+import { sendSignedTransaction } from "@/lib/trustlesswork";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import StatCard from "@/components/vendor/StatCard";
@@ -94,10 +95,12 @@ export default function AdminDisputesPage() {
       const token = localStorage.getItem("agroshield_token");
       if (!token) throw new Error("Please log in again to continue.");
 
-      // Check Freighter
-      const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
-      if (!freighterReady.isConnected) {
-        throw new Error("Please install or enable Freighter wallet to continue.");
+      // Ensure wallet is connected
+      let walletAddress = "";
+      try {
+        walletAddress = await connectWallet();
+      } catch {
+        throw new Error("Please connect your admin wallet to resolve this dispute.");
       }
 
       // 1. POST /api/disputes/resolve
@@ -122,30 +125,16 @@ export default function AdminDisputesPage() {
 
       const { unsignedTransaction } = await res.json();
 
-      // 2. Sign with Freighter
+      // 2. Sign with our new kit on TESTNET
       setResolutionState("signing");
-      const signedResult = await signTransaction(unsignedTransaction, {
-        networkPassphrase: "Test SDF Network ; September 2015",
+      const signedXdr = await signTransaction({
+        unsignedTransaction,
+        address: walletAddress,
       });
-
-      if (typeof signedResult === "object" && "error" in signedResult) {
-        throw new Error(signedResult.error.message || "Rejected in Freighter");
-      }
-
-      const signedXdr =
-        typeof signedResult === "string"
-          ? signedResult
-          : (signedResult as any).signedTxXdr || (signedResult as any).signedTransaction;
 
       // 3. Send transaction
       setResolutionState("sending");
-      const sendRes = await fetch("https://dev.api.trustlesswork.com/helper/send-transaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signedXdr }),
-      });
-
-      if (!sendRes.ok) throw new Error("Failed to send transaction to network");
+      await sendSignedTransaction(signedXdr);
 
       setResolutionState("success");
       await fetchDisputes();
@@ -205,7 +194,7 @@ export default function AdminDisputesPage() {
             Dispute Resolution
           </h1>
           <p className="mt-1 text-sm text-neutral-500 font-[family-name:var(--font-inter)]">
-            Review and resolve open disputes. You sign each resolution with your Freighter wallet.
+            Review and resolve open disputes. You sign each resolution with your wallet.
           </p>
         </div>
 
@@ -382,13 +371,13 @@ export default function AdminDisputesPage() {
                         ? resolutionState === "api"
                           ? "Submitting..."
                           : resolutionState === "signing"
-                          ? "Sign with Freighter..."
+                          ? "Signing..."
                           : resolutionState === "sending"
                           ? "Sending..."
                           : resolutionState === "success"
                           ? "✅ Resolved"
                           : "Processing..."
-                        : "Sign & Resolve with Freighter →"}
+                        : "Sign & Resolve Dispute →"}
                     </button>
                   </div>
                 )}

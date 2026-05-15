@@ -40,15 +40,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Escrow contractId missing" }, { status: 400 });
     }
 
-    let response: { unsignedTransaction?: string } = {};
-    try {
-      response = await releaseFunds({
-        contractId: escrow.contractId,
-        releaseSigner: farmer.walletAddress,
-      });
-    } catch (error) {
-      console.error("[ESCROW_RELEASE_TW]", error);
-      response = { unsignedTransaction: "DEMO_XDR_UNSIGNED" };
+    const response = await releaseFunds({
+      contractId: escrow.contractId,
+      releaseSigner: farmer.walletAddress,
+    });
+
+    if (!response.unsignedTransaction) {
+      throw new Error("Trustless Work did not return an unsigned transaction.");
     }
 
     await prisma.escrow.update({
@@ -58,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      unsignedTransaction: response.unsignedTransaction ?? "DEMO_XDR_UNSIGNED",
+      unsignedTransaction: response.unsignedTransaction,
     });
   } catch (error) {
     console.error("[ESCROW_RELEASE]", error);

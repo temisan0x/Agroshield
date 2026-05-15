@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getEscrow } from "@/lib/trustlesswork";
+import { getEscrowStatus } from "@/lib/trustlesswork";
 
 export async function GET(
   _request: Request,
@@ -20,7 +20,7 @@ export async function GET(
     let onChainStatus: unknown = null;
     if (escrow.contractId) {
       try {
-        onChainStatus = await getEscrow(escrow.contractId);
+        onChainStatus = await getEscrowStatus(escrow.contractId);
       } catch (error) {
         console.error("[ESCROW_STATUS_TW]", error);
         onChainStatus = {
