@@ -18,7 +18,6 @@ async function ensureWalletKit() {
   if (!kitInitialized) {
     StellarWalletsKit.init({
       network: Networks.TESTNET,
-      selectedWalletId: FREIGHTER_ID,
       modules: [new FreighterModule()],
     });
 
@@ -45,10 +44,39 @@ export const signTransaction = async ({
 
 /**
  * Connect wallet and get address using the authModal
+ * Always disconnect first to force a signature prompt on every connection attempt
  */
 export const connectWallet = async (): Promise<string> => {
   const { StellarWalletsKit } = await ensureWalletKit();
+  
+  try {
+    // Clear any previous connection state
+    await StellarWalletsKit.disconnect();
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("stellar-wallets-kit-wallet-id");
+    }
+  } catch (_) {
+    // Ignore error if there's no wallet to disconnect
+  }
+
+  // Use authModal which will now show the selection modal because we removed selectedWalletId from init
   const { address } = await StellarWalletsKit.authModal();
+  
+  if (!address) {
+    throw new Error("No address returned from wallet");
+  }
+
+  // Force a signature prompt to "sign to connect" as requested
+  try {
+    const { signMessage } = await import("@stellar/freighter-api");
+    await signMessage(`Authorize AgroShield connection at ${new Date().toISOString()}`);
+  } catch (error) {
+    console.error("Signature failed or rejected:", error);
+    // We still have the address, but if the user rejected the sign, 
+    // we might want to throw an error if "sign to connect" is mandatory.
+    throw new Error("Signature required to connect wallet");
+  }
+
   return address;
 };
 
@@ -58,4 +86,7 @@ export const connectWallet = async (): Promise<string> => {
 export const disconnectWallet = async (): Promise<void> => {
   const { StellarWalletsKit } = await ensureWalletKit();
   await StellarWalletsKit.disconnect();
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("stellar-wallets-kit-wallet-id");
+  }
 };
