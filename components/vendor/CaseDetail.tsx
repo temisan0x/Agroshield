@@ -20,6 +20,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   const [error, setError] = useState<string | null>(null);
   const [bidOpen, setBidOpen] = useState(false);
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
+  const [fundingEscrow, setFundingEscrow] = useState(false);
   const [escrowError, setEscrowError] = useState<string | null>(null);
   const [escrowNotice, setEscrowNotice] = useState<string | null>(null);
   const [userWalletAddress, setUserWalletAddress] = useState<string | null>(null);
@@ -38,7 +39,10 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
     }
   }, [id]);
 
-  useEffect(() => { fetchCase(); }, [fetchCase]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchCase();
+  }, [fetchCase]);
 
   // Fetch user profile to check wallet status
   useEffect(() => {
@@ -103,6 +107,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   const date = new Date(caseData.createdAt).toLocaleDateString("en-NG", {
     month: "long", day: "numeric", year: "numeric",
   });
+  const expectedWalletAddress = userWalletAddress ?? caseData.farmer.walletAddress;
 
   const handleAcceptBid = async (bid: BidOnCase) => {
     setEscrowError(null);
@@ -113,6 +118,11 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
       const token = localStorage.getItem("agroshield_token");
       if (!token) {
         throw new Error("Please log in again to continue.");
+      }
+
+      const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
+      if (!freighterReady.isConnected) {
+        throw new Error("Connect Freighter before accepting this bid.");
       }
 
       const createRes = await fetch("/api/escrow/create", {
@@ -134,32 +144,17 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
         throw new Error(createData.error ?? "Failed to create escrow.");
       }
 
-      const freighterReady = await isConnected().catch(() => false);
-      if (!freighterReady) {
-        setEscrowNotice("Install Freighter wallet to continue.");
-        return;
-      }
-
       const signedXdr = await signTransaction(createData.unsignedTransaction);
+      const signedTxXdr = (signedXdr as { signedTxXdr?: string }).signedTxXdr;
+      const signerAddress = (signedXdr as { signerAddress?: string }).signerAddress ?? "";
+      const signError = (signedXdr as { error?: { message?: string } }).error;
 
-      const sendRes = await fetch("https://dev.api.trustlesswork.com/helper/send-transaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ xdr: signedXdr }),
-      });
-
-      const sendData = (await sendRes.json().catch(() => ({}))) as {
-        contractId?: string;
-        result?: { contractId?: string };
-      };
-
-      if (!sendRes.ok) {
-        throw new Error("Failed to broadcast escrow transaction.");
+      if (signError || !signedTxXdr) {
+        throw new Error(signError?.message ?? "Failed to sign the deploy transaction.");
       }
 
-      const contractId = sendData.contractId ?? sendData.result?.contractId;
-      if (!contractId) {
-        throw new Error("Missing contract ID from escrow transaction.");
+      if (expectedWalletAddress && signerAddress && signerAddress !== expectedWalletAddress) {
+        throw new Error("Please sign with the farmer wallet connected to this case.");
       }
 
       const confirmRes = await fetch("/api/escrow/confirm", {
@@ -168,19 +163,108 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ escrowId: createData.escrowId, contractId }),
+        body: JSON.stringify({
+          escrowId: createData.escrowId,
+          bidId: bid.id,
+          signedXdr: signedTxXdr,
+        }),
       });
 
+      const confirmData = (await confirmRes.json().catch(() => ({}))) as {
+        contractId?: string;
+        error?: string;
+      };
+
       if (!confirmRes.ok) {
-        const confirmData = await confirmRes.json().catch(() => ({}));
-        throw new Error(confirmData.error ?? "Failed to confirm escrow.");
+        throw new Error(confirmData.error ?? "Failed to confirm escrow deployment.");
       }
 
+      setEscrowNotice("Escrow deployed. Fund it with USDC to start the contract.");
       await fetchCase();
     } catch (err) {
       setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setAcceptingBidId(null);
+    }
+  };
+
+  const handleFundEscrow = async () => {
+    if (!caseData.escrow) {
+      return;
+    }
+
+    setEscrowError(null);
+    setEscrowNotice(null);
+    setFundingEscrow(true);
+
+    try {
+      const token = localStorage.getItem("agroshield_token");
+      if (!token) {
+        throw new Error("Please log in again to continue.");
+      }
+
+      const freighterReady = await isConnected().catch(() => ({ isConnected: false }));
+      if (!freighterReady.isConnected) {
+        throw new Error("Connect Freighter before funding the escrow.");
+      }
+
+      const fundRes = await fetch("/api/escrow/fund", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ escrowId: caseData.escrow.id }),
+      });
+
+      const fundData = (await fundRes.json().catch(() => ({}))) as {
+        unsignedTransaction?: string;
+        error?: string;
+      };
+
+      if (!fundRes.ok || !fundData.unsignedTransaction) {
+        throw new Error(fundData.error ?? "Failed to create funding transaction.");
+      }
+
+      const signedXdr = await signTransaction(fundData.unsignedTransaction);
+      const signedTxXdr = (signedXdr as { signedTxXdr?: string }).signedTxXdr;
+      const signerAddress = (signedXdr as { signerAddress?: string }).signerAddress ?? "";
+      const signError = (signedXdr as { error?: { message?: string } }).error;
+
+      if (signError || !signedTxXdr) {
+        throw new Error(signError?.message ?? "Failed to sign the funding transaction.");
+      }
+
+      if (expectedWalletAddress && signerAddress && signerAddress !== expectedWalletAddress) {
+        throw new Error("Please sign with the farmer wallet connected to this case.");
+      }
+
+      const confirmRes = await fetch("/api/escrow/fund/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          escrowId: caseData.escrow.id,
+          signedXdr: signedTxXdr,
+        }),
+      });
+
+      const confirmData = (await confirmRes.json().catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!confirmRes.ok) {
+        throw new Error(confirmData.error ?? "Failed to confirm escrow funding.");
+      }
+
+      setEscrowNotice("Escrow funded. The USDC is now locked in Trustless Work.");
+      await fetchCase();
+    } catch (err) {
+      setEscrowError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setFundingEscrow(false);
     }
   };
 
@@ -324,6 +408,31 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
                 <span className="text-sm font-bold text-neutral-900">{date}</span>
               </div>
             </div>
+
+            {viewerRole === "FARMER" && caseData.escrow && caseData.escrow.contractId && caseData.escrow.status !== "FUNDED" ? (
+              <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50 p-4">
+                <p className="text-sm font-semibold text-sky-900">Fund escrow with testnet USDC</p>
+                <p className="mt-1 text-xs leading-5 text-sky-700">
+                  The deploy step only creates the contract. You still need to fund it with USDC before work can begin.
+                </p>
+                <a
+                  href="https://docs.trustlesswork.com/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex text-xs font-semibold text-sky-800 underline underline-offset-4"
+                >
+                  How to get testnet tokens
+                </a>
+                <button
+                  type="button"
+                  onClick={handleFundEscrow}
+                  disabled={fundingEscrow}
+                  className="mt-4 w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {fundingEscrow ? "Funding..." : "Fund Escrow"}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </motion.div>

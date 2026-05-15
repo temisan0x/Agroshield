@@ -23,7 +23,9 @@ export async function GET(
         onChainStatus = await getEscrow(escrow.contractId);
       } catch (error) {
         console.error("[ESCROW_STATUS_TW]", error);
-        onChainStatus = { unsignedTransaction: "DEMO_XDR_UNSIGNED" };
+        onChainStatus = {
+          error: error instanceof Error ? error.message : "Failed to fetch on-chain escrow status",
+        };
       }
     }
 

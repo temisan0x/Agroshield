@@ -61,43 +61,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await prisma.bid.update({
-      where: { id: bid.id },
-      data: { selected: true },
-    });
-
-    await prisma.case.update({
-      where: { id: caseId },
-      data: { status: "IN_PROGRESS" },
-    });
-
     const diagnosis = parseDiagnosis(foundCase.diagnosis);
     const diseaseName = diagnosis?.disease ?? "Crop Treatment";
 
-    let deployResponse: { unsignedTransaction?: string } = {};
-    try {
-      deployResponse = await deployEscrow({
-        engagementId: caseId,
-        title: `AgroShield: ${diseaseName}`,
-        description: `Crop treatment escrow for ${diseaseName}`,
+    const existingEscrow = await prisma.escrow.findUnique({
+      where: { caseId },
+      include: {
+        transactions: {
+          where: { type: "DEPLOY" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    if (existingEscrow) {
+      const existingDeploy = existingEscrow.transactions[0];
+      if (!existingDeploy?.xdr) {
+        return NextResponse.json(
+          { error: "Existing escrow deployment is missing the unsigned transaction." },
+          { status: 409 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        unsignedTransaction: existingDeploy.xdr,
+        escrowId: existingEscrow.id,
+      });
+    }
+
+    const deployResponse = await deployEscrow({
+      signer: farmer.walletAddress,
+      engagementId: caseId,
+      title: `AgroShield: ${diseaseName}`,
+      description: `Crop treatment escrow for ${diseaseName}`,
+      amount: Number(bid.amount),
+      platformFee: 1,
+      roles: {
         approver: farmer.walletAddress,
         serviceProvider: vendor.walletAddress,
+        platformAddress:
+          process.env.PLATFORM_WALLET_ADDRESS ?? farmer.walletAddress,
         releaseSigner: farmer.walletAddress,
+        disputeResolver:
+          process.env.PLATFORM_WALLET_ADDRESS ?? farmer.walletAddress,
         receiver: vendor.walletAddress,
-        platformAddress: process.env.PLATFORM_WALLET_ADDRESS ?? "GDEMO...placeholder",
-        disputeResolver: process.env.PLATFORM_WALLET_ADDRESS ?? "GDEMO...placeholder",
-        amount: bid.amount.toString(),
-        platformFee: "1",
-        milestones: [
-          {
-            description: "Treatment delivered and confirmed",
-            amount: bid.amount.toString(),
-          },
-        ],
-      });
-    } catch (error) {
-      console.error("[ESCROW_DEPLOY]", error);
-      deployResponse = { unsignedTransaction: "DEMO_XDR_UNSIGNED" };
+      },
+      trustline: {
+        address:
+          process.env.TRUSTLESS_WORK_TRUSTLINE_ADDRESS ??
+          "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+        symbol: process.env.TRUSTLESS_WORK_TRUSTLINE_SYMBOL ?? "USDC",
+      },
+      milestones: [
+        {
+          description: "Treatment delivered and confirmed",
+        },
+      ],
+    });
+
+    const unsignedTransaction = deployResponse.unsignedTransaction;
+    if (!unsignedTransaction) {
+      return NextResponse.json(
+        { error: "Trustless Work did not return an unsigned transaction." },
+        { status: 502 }
+      );
     }
 
     const escrow = await prisma.escrow.create({
@@ -112,7 +141,7 @@ export async function POST(request: NextRequest) {
     await prisma.transaction.create({
       data: {
         escrowId: escrow.id,
-        xdr: deployResponse.unsignedTransaction ?? "DEMO_XDR_UNSIGNED",
+        xdr: unsignedTransaction,
         type: "DEPLOY",
         signed: false,
       },
@@ -120,11 +149,17 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      unsignedTransaction: deployResponse.unsignedTransaction ?? "DEMO_XDR_UNSIGNED",
+      unsignedTransaction,
       escrowId: escrow.id,
     });
   } catch (error) {
     console.error("[ESCROW_CREATE]", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "Internal server error",
+      },
+      { status: 500 }
+    );
   }
 }

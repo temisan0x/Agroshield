@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notifyAuthChange } from "@/lib/auth-client";
-import { requestAccess, getAddress } from "@stellar/freighter-api";
+import { requestAccess } from "@stellar/freighter-api";
 
 type ProfileItem = {
   id: string;
@@ -98,6 +98,22 @@ function truncateAddress(address: string | null) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result?.toString() ?? "";
+      if (!result.startsWith("data:image/")) {
+        reject(new Error("Please choose a valid image file."));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function LoadingShell() {
   return (
     <motion.div
@@ -143,6 +159,7 @@ export default function ProfileDashboard() {
     walletAddress: "",
     profileImage: "",
   });
+  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [connectingWallet, setConnectingWallet] = useState(false);
@@ -221,6 +238,7 @@ export default function ProfileDashboard() {
       walletAddress: state.profile.user.walletAddress ?? "",
       profileImage: state.profile.user.profileImage ?? "",
     });
+    setProfileImagePreview(state.profile.user.profileImage ?? null);
     setIsEditOpen(true);
   };
 
@@ -228,6 +246,20 @@ export default function ProfileDashboard() {
     if (isSavingProfile) return;
     setIsEditOpen(false);
     setEditError(null);
+  };
+
+  const handleProfileImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) return;
+
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setEditForm((current) => ({ ...current, profileImage: dataUrl }));
+      setProfileImagePreview(dataUrl);
+      setEditError(null);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "Unable to load image.");
+    }
   };
 
   const handleSaveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -249,12 +281,12 @@ export default function ProfileDashboard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-body: JSON.stringify({
-           email: editForm.email,
-           username: editForm.username,
-           walletAddress: editForm.walletAddress.trim() || null,
-           profileImage: editForm.profileImage.trim() || null,
-         }),
+        body: JSON.stringify({
+          email: editForm.email,
+          username: editForm.username,
+          walletAddress: editForm.walletAddress.trim() || null,
+          profileImage: editForm.profileImage.trim() || null,
+        }),
       });
 
       const data = (await response.json()) as { error?: string; success?: boolean };
@@ -297,9 +329,7 @@ body: JSON.stringify({
         throw new Error(access.error.message ?? "Failed to request access.");
       }
 
-      const { address } = await getAddress();
-
-      if (!address) {
+      if (!access.address) {
         throw new Error("Failed to retrieve wallet address from Freighter.");
       }
 
@@ -309,7 +339,7 @@ body: JSON.stringify({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ walletAddress: address }),
+        body: JSON.stringify({ walletAddress: access.address }),
       });
 
       const data = (await response.json()) as { success?: boolean; walletAddress?: string; error?: string };
@@ -464,8 +494,9 @@ body: JSON.stringify({
             <div className="absolute bottom-0 left-0 h-52 w-52 -translate-x-16 translate-y-16 rounded-full bg-[#c7f1d2] opacity-50 blur-3xl" />
 
             <div className="relative z-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-<div className="flex flex-wrap items-start gap-5">
+              <div className="flex flex-wrap items-start gap-5">
                 {profile.user.profileImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={profile.user.profileImage}
                     alt="Profile"
@@ -894,21 +925,44 @@ body: JSON.stringify({
 
                <div>
                  <label className="text-sm font-medium text-neutral-700" htmlFor="profile-image">
-                   Profile image URL
+                   Profile image
                  </label>
-                 <input
-                   id="profile-image"
-                   type="text"
-                   value={editForm.profileImage}
-                   onChange={(event) =>
-                     setEditForm((current) => ({
-                       ...current,
-                       profileImage: event.target.value,
-                     }))
-                   }
-                   placeholder="https://example.com/image.png"
-                   className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
-                 />
+                 <div className="mt-2 flex items-center gap-4">
+                   {profileImagePreview ? (
+                     // eslint-disable-next-line @next/next/no-img-element
+                     <img
+                       src={profileImagePreview}
+                       alt="Profile preview"
+                       className="h-16 w-16 rounded-2xl object-cover ring-1 ring-neutral-200"
+                     />
+                   ) : (
+                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-neutral-100 text-xs font-semibold text-neutral-400">
+                       Preview
+                     </div>
+                   )}
+                   <input
+                     id="profile-image"
+                     type="file"
+                     accept="image/*"
+                     onChange={handleProfileImageChange}
+                     className="block w-full cursor-pointer rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition file:mr-4 file:rounded-xl file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800 focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
+                   />
+                 </div>
+                 <p className="mt-2 text-xs text-neutral-400">
+                   Upload an image from your device. It will be stored as a data URL, like the crop photo upload.
+                 </p>
+                 {profileImagePreview ? (
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setEditForm((current) => ({ ...current, profileImage: "" }));
+                       setProfileImagePreview(null);
+                     }}
+                     className="mt-2 text-xs font-medium text-neutral-500 underline underline-offset-4"
+                   >
+                     Remove image
+                   </button>
+                 ) : null}
                </div>
 
               {editError ? (
