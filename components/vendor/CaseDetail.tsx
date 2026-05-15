@@ -29,6 +29,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
   const [userWalletAddress, setUserWalletAddress] = useState<string | null>(null);
   const [walletChecking, setWalletChecking] = useState(true);
   const [releasingFunds, setReleasingFunds] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<"FARMER" | "VENDOR" | null>(viewerRole === "VENDOR" ? null : (viewerRole as "FARMER" | "VENDOR"));
 
   const fetchCase = useCallback(async () => {
     try {
@@ -71,21 +72,39 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
       }
     }
     checkWallet();
-  }, []);
+
+    async function checkRole() {
+      if (viewerRole !== "VENDOR") return; // If explicitly passed, don't override
+      try {
+        const token = localStorage.getItem("agroshield_token");
+        if (!token) return;
+        const res = await fetch("/api/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentUserRole(data?.user?.role ?? "VENDOR");
+        }
+      } catch {
+        setCurrentUserRole("VENDOR");
+      }
+    }
+    checkRole();
+  }, [viewerRole]);
 
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-5xl animate-pulse py-10">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
           <div>
-            <div className="aspect-[4/3] rounded-2xl bg-neutral-100" />
+            <div className="aspect-[4/3] rounded-2xl bg-stone-200/40" />
             <div className="mt-6 space-y-4">
-              <div className="h-4 w-24 rounded-full bg-neutral-100" />
-              <div className="h-10 w-3/4 rounded-2xl bg-neutral-100" />
-              <div className="h-4 w-1/2 rounded-full bg-neutral-100" />
+              <div className="h-4 w-24 rounded-full bg-stone-200/40" />
+              <div className="h-10 w-3/4 rounded-2xl bg-stone-200/40" />
+              <div className="h-4 w-1/2 rounded-full bg-stone-200/40" />
               <div className="grid gap-3 pt-4 sm:grid-cols-2">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-20 rounded-xl bg-neutral-100" />
+                  <div key={i} className="h-20 rounded-xl bg-stone-200/40" />
                 ))}
               </div>
             </div>
@@ -93,16 +112,16 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
           <div className="space-y-4">
             <div className="p-6">
               <div className="flex gap-2">
-                <div className="h-6 w-16 rounded-full bg-neutral-100" />
-                <div className="h-6 w-16 rounded-full bg-neutral-100" />
+                <div className="h-6 w-16 rounded-full bg-stone-200/40" />
+                <div className="h-6 w-16 rounded-full bg-stone-200/40" />
               </div>
-              <div className="mt-4 h-6 w-1/2 rounded-full bg-neutral-100" />
-              <div className="mt-2 h-4 w-full rounded-full bg-neutral-100" />
-              <div className="mt-5 h-12 w-full rounded-xl bg-neutral-100" />
-              <div className="my-5 border-t border-neutral-100" />
+              <div className="mt-4 h-6 w-1/2 rounded-full bg-stone-200/40" />
+              <div className="mt-2 h-4 w-full rounded-full bg-stone-200/40" />
+              <div className="mt-5 h-12 w-full rounded-xl bg-stone-200/40" />
+              <div className="my-5 border-t border-neutral-100/50" />
               <div className="space-y-3">
-                <div className="h-4 w-full rounded-full bg-neutral-100" />
-                <div className="h-4 w-full rounded-full bg-neutral-100" />
+                <div className="h-4 w-full rounded-full bg-stone-200/40" />
+                <div className="h-4 w-full rounded-full bg-stone-200/40" />
               </div>
             </div>
           </div>
@@ -629,7 +648,7 @@ export default function CaseDetail({ id, viewerRole = "VENDOR" }: CaseDetailProp
                     status={status}
                     index={i}
                     action={
-                      viewerRole === "FARMER" && isOpen && !bid.selected ? (
+                      (viewerRole === "FARMER" || currentUserRole === "FARMER") && isOpen && !bid.selected ? (
                         <button
                           type="button"
                           onClick={() => handleAcceptBid(bid)}

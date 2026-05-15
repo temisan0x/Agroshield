@@ -5,7 +5,7 @@ import Nav from "@/components/Nav";
 export function Skeleton({ className }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse rounded-2xl bg-neutral-100 ${className}`}
+      className={`animate-pulse rounded-2xl bg-stone-100 ${className}`}
     />
   );
 }

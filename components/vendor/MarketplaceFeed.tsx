@@ -22,6 +22,15 @@ export default function MarketplaceFeed({ initialCases }: MarketplaceFeedProps) 
   const [search, setSearch] = useState("");
   const [bidCaseId, setBidCaseId] = useState<string | null>(null);
   const [placedBids, setPlacedBids] = useState<Record<string, boolean>>({});
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("agroshield_token");
+    if (!token) return;
+    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => setUserRole(data.user?.role ?? null));
+  }, []);
 
   const fetchCases = useCallback(async () => {
     try {
@@ -129,18 +138,20 @@ export default function MarketplaceFeed({ initialCases }: MarketplaceFeedProps) 
                   index={i}
                   onClick={() => router.push(`/vendor/cases/${c.id}`)}
                   action={
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setBidCaseId(c.id); }}
-                      disabled={placedBids[c.id]}
-                      className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-                        placedBids[c.id]
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-neutral-900 text-white hover:bg-neutral-800"
-                      }`}
-                    >
-                      {placedBids[c.id] ? "Bid placed ✓" : "Place Bid"}
-                    </button>
+                    userRole === "VENDOR" ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setBidCaseId(c.id); }}
+                        disabled={placedBids[c.id]}
+                        className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                          placedBids[c.id]
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-neutral-900 text-white hover:bg-neutral-800"
+                        }`}
+                      >
+                        {placedBids[c.id] ? "Bid placed ✓" : "Place Bid"}
+                      </button>
+                    ) : null
                   }
                 />
               ))}

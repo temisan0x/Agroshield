@@ -173,31 +173,23 @@ function Nav() {
               Diagnose
             </Link>
 
-            {hydrated && isAuthed && role === "VENDOR" ? (
-              <>
-                <Link
-                  href="/vendor/cases"
-                  className={`transition hover:text-white ${pathname === "/vendor/cases" ? "text-white" : ""}`}
-                >
-                  Browse Cases
-                </Link>
-                <Link
-                  href="/vendor/bids"
-                  className={`transition hover:text-white ${pathname === "/vendor/bids" ? "text-white" : ""}`}
-                >
-                  My Bids
-                </Link>
-              </>
-            ) : null}
-
-            {hydrated && isAuthed && role === "FARMER" ? (
+            {hydrated && isAuthed && role === "FARMER" && (
               <Link
                 href="/farmer/cases"
                 className={`transition hover:text-white ${pathname === "/farmer/cases" ? "text-white" : ""}`}
               >
                 My Cases
               </Link>
-            ) : null}
+            )}
+
+            {hydrated && isAuthed && role === "VENDOR" && (
+              <Link
+                href="/vendor/bids"
+                className={`transition hover:text-white ${pathname === "/vendor/bids" ? "text-white" : ""}`}
+              >
+                My Bids
+              </Link>
+            )}
 
             {hydrated && isAuthed ? (
               <Link
