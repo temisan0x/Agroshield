@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notifyAuthChange } from "@/lib/auth-client";
-import { requestAccess } from "@stellar/freighter-api";
+import { requestAccess, getAddress, setAllowed } from "@stellar/freighter-api";
 
 type ProfileItem = {
   id: string;
@@ -98,6 +98,26 @@ function truncateAddress(address: string | null) {
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
 
+function updateProfileWallet(
+  current: ProfileState,
+  walletAddress: string | null,
+): ProfileState {
+  if (current.status !== "ready") {
+    return current;
+  }
+
+  return {
+    status: "ready",
+    profile: {
+      ...current.profile,
+      user: {
+        ...current.profile.user,
+        walletAddress,
+      },
+    },
+  };
+}
+
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -109,7 +129,8 @@ function fileToDataUrl(file: File) {
       }
       resolve(result);
     };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image file."));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Failed to read image file."));
     reader.readAsDataURL(file);
   });
 }
@@ -172,7 +193,9 @@ export default function ProfileDashboard() {
     walletAddress: "",
     profileImage: "",
   });
-  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(
+    null,
+  );
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [connectingWallet, setConnectingWallet] = useState(false);
@@ -261,7 +284,9 @@ export default function ProfileDashboard() {
     setEditError(null);
   };
 
-  const handleProfileImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProfileImageChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = event.target.files?.[0] ?? null;
     if (!file) return;
 
@@ -271,7 +296,9 @@ export default function ProfileDashboard() {
       setProfileImagePreview(dataUrl);
       setEditError(null);
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : "Unable to load image.");
+      setEditError(
+        error instanceof Error ? error.message : "Unable to load image.",
+      );
     }
   };
 
@@ -302,7 +329,10 @@ export default function ProfileDashboard() {
         }),
       });
 
-      const data = (await response.json()) as { error?: string; success?: boolean };
+      const data = (await response.json()) as {
+        error?: string;
+        success?: boolean;
+      };
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Unable to save profile.");
       }
@@ -310,7 +340,9 @@ export default function ProfileDashboard() {
       setIsEditOpen(false);
       setRetryKey((value) => value + 1);
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : "Unable to save profile.");
+      setEditError(
+        error instanceof Error ? error.message : "Unable to save profile.",
+      );
     } finally {
       setIsSavingProfile(false);
     }
@@ -337,12 +369,36 @@ export default function ProfileDashboard() {
     }
 
     try {
+      const allowResult = await withTimeout(setAllowed(), 15000);
+      if (allowResult.error) {
+        throw new Error(
+          allowResult.error.message ?? "Failed to authorize Freighter access.",
+        );
+      }
+
+      if (!allowResult.isAllowed) {
+        throw new Error("Freighter access was not approved.");
+      }
+
       const access = await withTimeout(requestAccess(), 15000);
       if (access.error) {
         throw new Error(access.error.message ?? "Failed to request access.");
       }
 
-      if (!access.address) {
+      let walletAddress = access.address?.trim() ?? "";
+      if (!walletAddress) {
+        const addressResult = await withTimeout(getAddress(), 15000);
+        if (addressResult.error) {
+          throw new Error(
+            addressResult.error.message ??
+              "Failed to retrieve wallet address from Freighter.",
+          );
+        }
+
+        walletAddress = addressResult.address.trim();
+      }
+
+      if (!walletAddress) {
         throw new Error("Failed to retrieve wallet address from Freighter.");
       }
 
@@ -352,18 +408,29 @@ export default function ProfileDashboard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ walletAddress: access.address }),
+        body: JSON.stringify({ walletAddress }),
       });
 
-      const data = (await response.json()) as { success?: boolean; walletAddress?: string; error?: string };
+      const data = (await response.json()) as {
+        success?: boolean;
+        walletAddress?: string;
+        error?: string;
+      };
 
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Failed to save wallet address.");
       }
 
-      setRetryKey((value) => value + 1);
+      const savedWalletAddress = data.walletAddress ?? walletAddress;
+      setState((current) => updateProfileWallet(current, savedWalletAddress));
+      setEditForm((current) => ({
+        ...current,
+        walletAddress: savedWalletAddress,
+      }));
     } catch (err) {
-      setWalletError(err instanceof Error ? err.message : "Failed to connect wallet.");
+      setWalletError(
+        err instanceof Error ? err.message : "Failed to connect wallet.",
+      );
     } finally {
       setConnectingWallet(false);
     }
@@ -385,7 +452,10 @@ export default function ProfileDashboard() {
         body: JSON.stringify({ walletAddress: null }),
       });
 
-      const data = (await response.json()) as { success?: boolean; error?: string };
+      const data = (await response.json()) as {
+        success?: boolean;
+        error?: string;
+      };
 
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Failed to disconnect wallet.");
@@ -408,7 +478,7 @@ export default function ProfileDashboard() {
                     value: "Not connected",
                     helper: "Add a wallet to settle payouts faster",
                   }
-                : setting
+                : setting,
             ),
           },
         };
@@ -420,7 +490,9 @@ export default function ProfileDashboard() {
 
       setRetryKey((value) => value + 1);
     } catch (error) {
-      setWalletError(error instanceof Error ? error.message : "Failed to disconnect wallet.");
+      setWalletError(
+        error instanceof Error ? error.message : "Failed to disconnect wallet.",
+      );
     }
   }, [isEditOpen]);
 
@@ -518,13 +590,20 @@ export default function ProfileDashboard() {
     profile.user.role === "FARMER"
       ? "bg-[#16a34a]/10 text-[#16a34a]"
       : "bg-[#d5ebff] text-[#0f6b2f]";
-  
+
   // Avatar logic: profileImage > username > email
   const avatarLetter = profile.user.profileImage
     ? null
-    : (profile.user.username?.[0] ?? profile.user.email[0] ?? "?").toUpperCase();
+    : (
+        profile.user.username?.[0] ??
+        profile.user.email[0] ??
+        "?"
+      ).toUpperCase();
   const displayEmail = formatEmailForDisplay(profile.user.email);
-  const displayUsername = formatUsernameDisplay(profile.user.username, profile.user.email);
+  const displayUsername = formatUsernameDisplay(
+    profile.user.username,
+    profile.user.email,
+  );
 
   return (
     <main className="pt-28 pb-24">
@@ -565,8 +644,12 @@ export default function ProfileDashboard() {
                   >
                     {displayUsername}
                   </h1>
-                  <p className="mt-3 text-sm font-medium text-neutral-700">{profile.user.email}</p>
-                  <p className="mt-4 text-base text-neutral-500 md:text-lg">{profile.headline}</p>
+                  <p className="mt-3 text-sm font-medium text-neutral-700">
+                    {profile.user.email}
+                  </p>
+                  <p className="mt-4 text-base text-neutral-500 md:text-lg">
+                    {profile.headline}
+                  </p>
                   <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-500">
                     {profile.subheadline}
                   </p>
@@ -604,67 +687,85 @@ export default function ProfileDashboard() {
                     {formatDate(profile.user.createdAt)}
                   </div>
                 </div>
-<div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
-                     Wallet
-                   </div>
-<div className="mt-2 flex items-center gap-2">
-                      <span className="break-all font-[family-name:var(--font-manrope)] text-xl font-semibold text-neutral-900">
-                        {profile.user.walletAddress ? truncateAddress(profile.user.walletAddress) : "Not connected"}
-                      </span>
-                      {profile.user.walletAddress ? (
-                        <button
-                          type="button"
-                          onClick={() => handleCopyWallet(profile.user.walletAddress)}
-                          className="relative rounded-full p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700"
-                          title="Copy wallet address"
-                        >
-                          <AnimatePresence mode="wait">
-                            {copiedAddress === profile.user.walletAddress ? (
-                              <motion.svg
-                                key="check"
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4 text-[#16a34a]"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                initial={{ scale: 0, rotate: -180 }}
-                                animate={{ scale: 1, rotate: 0 }}
-                                exit={{ scale: 0, rotate: 180 }}
-                                transition={{ duration: 0.2 }}
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </motion.svg>
-                            ) : (
-                              <motion.svg
-                                key="copy"
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                initial={{ scale: 0, rotate: 180 }}
-                                animate={{ scale: 1, rotate: 0 }}
-                                exit={{ scale: 0, rotate: -180 }}
-                                transition={{ duration: 0.2 }}
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012 2h8a2 2 0 012-2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </motion.svg>
-                            )}
-                          </AnimatePresence>
-                        </button>
-                      ) : null}
-                    </div>
-                 </div>
+                <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                  <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
+                    Wallet
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="break-all font-[family-name:var(--font-manrope)] text-xl font-semibold text-neutral-900">
+                      {profile.user.walletAddress
+                        ? truncateAddress(profile.user.walletAddress)
+                        : "Not connected"}
+                    </span>
+                    {profile.user.walletAddress ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCopyWallet(profile.user.walletAddress)
+                        }
+                        className="relative rounded-full p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700"
+                        title="Copy wallet address"
+                      >
+                        <AnimatePresence mode="wait">
+                          {copiedAddress === profile.user.walletAddress ? (
+                            <motion.svg
+                              key="check"
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4 text-[#16a34a]"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              initial={{ scale: 0, rotate: -180 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              exit={{ scale: 0, rotate: 180 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                              />
+                            </motion.svg>
+                          ) : (
+                            <motion.svg
+                              key="copy"
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              initial={{ scale: 0, rotate: 180 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              exit={{ scale: 0, rotate: -180 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012 2h8a2 2 0 012-2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </motion.svg>
+                          )}
+                        </AnimatePresence>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4 sm:col-span-2">
-                  <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">Username</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
+                    Username
+                  </div>
                   <div
                     className="mt-2 font-[family-name:var(--font-manrope)] text-lg font-semibold text-neutral-900"
                     title={profile.user.username ?? profile.user.email}
                   >
                     {displayUsername}
                   </div>
-                  <div className="mt-2 text-xs text-neutral-500">{displayEmail}</div>
+                  <div className="mt-2 text-xs text-neutral-500">
+                    {displayEmail}
+                  </div>
                 </div>
               </div>
             </div>
@@ -840,30 +941,31 @@ export default function ProfileDashboard() {
                 <div className="space-y-3">
                   {profile.settings.map((setting) => {
                     const helperText =
-                      setting.label === "Wallet status" && profile.user.walletAddress
+                      setting.label === "Wallet status" &&
+                      profile.user.walletAddress
                         ? truncateAddress(profile.user.walletAddress)
                         : setting.helper;
 
                     return (
-                    <div
-                      key={setting.label}
-                      className="rounded-2xl border border-neutral-100 bg-[#f9f4ee] p-4"
-                    >
-                      <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
-                        {setting.label}
+                      <div
+                        key={setting.label}
+                        className="rounded-2xl border border-neutral-100 bg-[#f9f4ee] p-4"
+                      >
+                        <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
+                          {setting.label}
+                        </div>
+                        <div className="mt-1 font-[family-name:var(--font-manrope)] text-lg font-semibold text-neutral-900">
+                          {setting.value}
+                        </div>
+                        <div className="mt-2 text-sm text-neutral-500">
+                          {helperText}
+                        </div>
                       </div>
-                      <div className="mt-1 font-[family-name:var(--font-manrope)] text-lg font-semibold text-neutral-900">
-                        {setting.value}
-                      </div>
-                      <div className="mt-2 text-sm text-neutral-500">
-                        {helperText}
-                      </div>
-                    </div>
                     );
                   })}
                 </div>
 
-<div className="flex flex-wrap gap-3 pt-2">
+                <div className="flex flex-wrap gap-3 pt-2">
                   {profile.user.walletAddress ? (
                     <button
                       type="button"
@@ -913,7 +1015,9 @@ export default function ProfileDashboard() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="border-b border-neutral-100 px-6 py-5 sm:px-8">
-              <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">Edit profile</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
+                Edit profile
+              </div>
               <h2
                 id="profile-editor-title"
                 className="mt-2 font-[family-name:var(--font-manrope)] text-2xl font-semibold text-neutral-900"
@@ -921,13 +1025,20 @@ export default function ProfileDashboard() {
                 Update your account details
               </h2>
               <p className="mt-2 text-sm text-neutral-500">
-                Change your email or wallet address and save the update to the database.
+                Change your email or wallet address and save the update to the
+                database.
               </p>
             </div>
 
-            <form className="space-y-5 px-6 py-6 sm:px-8" onSubmit={handleSaveProfile}>
+            <form
+              className="space-y-5 px-6 py-6 sm:px-8"
+              onSubmit={handleSaveProfile}
+            >
               <div>
-                <label className="text-sm font-medium text-neutral-700" htmlFor="profile-email">
+                <label
+                  className="text-sm font-medium text-neutral-700"
+                  htmlFor="profile-email"
+                >
                   Email
                 </label>
                 <input
@@ -935,14 +1046,20 @@ export default function ProfileDashboard() {
                   type="email"
                   value={editForm.email}
                   onChange={(event) =>
-                    setEditForm((current) => ({ ...current, email: event.target.value }))
+                    setEditForm((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
                   }
                   className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
                 />
               </div>
 
               <div>
-                <label className="text-sm font-medium text-neutral-700" htmlFor="profile-username">
+                <label
+                  className="text-sm font-medium text-neutral-700"
+                  htmlFor="profile-username"
+                >
                   Username
                 </label>
                 <input
@@ -950,73 +1067,86 @@ export default function ProfileDashboard() {
                   type="text"
                   value={editForm.username}
                   onChange={(event) =>
-                    setEditForm((current) => ({ ...current, username: event.target.value }))
+                    setEditForm((current) => ({
+                      ...current,
+                      username: event.target.value,
+                    }))
                   }
                   placeholder="lowercase letters, numbers, underscores"
                   className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
                 />
               </div>
 
-<div>
-                 <label className="text-sm font-medium text-neutral-700" htmlFor="profile-wallet">
-                   Wallet address
-                 </label>
-                 <input
-                   id="profile-wallet"
-                   type="text"
-                   value={editForm.walletAddress}
-                   onChange={(event) =>
-                     setEditForm((current) => ({
-                       ...current,
-                       walletAddress: event.target.value,
-                     }))
-                   }
-                   placeholder="Optional"
-                   className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
-                 />
-               </div>
+              <div>
+                <label
+                  className="text-sm font-medium text-neutral-700"
+                  htmlFor="profile-wallet"
+                >
+                  Wallet address
+                </label>
+                <input
+                  id="profile-wallet"
+                  type="text"
+                  value={editForm.walletAddress}
+                  onChange={(event) =>
+                    setEditForm((current) => ({
+                      ...current,
+                      walletAddress: event.target.value,
+                    }))
+                  }
+                  placeholder="Optional"
+                  className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
+                />
+              </div>
 
-               <div>
-                 <label className="text-sm font-medium text-neutral-700" htmlFor="profile-image">
-                   Profile image
-                 </label>
-                 <div className="mt-2 flex items-center gap-4">
-                   {profileImagePreview ? (
-                     // eslint-disable-next-line @next/next/no-img-element
-                     <img
-                       src={profileImagePreview}
-                       alt="Profile preview"
-                       className="h-16 w-16 rounded-2xl object-cover ring-1 ring-neutral-200"
-                     />
-                   ) : (
-                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-neutral-100 text-xs font-semibold text-neutral-400">
-                       Preview
-                     </div>
-                   )}
-                   <input
-                     id="profile-image"
-                     type="file"
-                     accept="image/*"
-                     onChange={handleProfileImageChange}
-                     className="block w-full cursor-pointer rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition file:mr-4 file:rounded-xl file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800 focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
-                   />
-                 </div>
-                 <p className="mt-2 text-xs text-neutral-400">
-                   Upload an image from your device. It will be stored as a data URL, like the crop photo upload.
-                 </p>
-                 {profileImagePreview ? (
-                   <button
-                     type="button"
-                     onClick={() => {
-                       setEditForm((current) => ({ ...current, profileImage: "" }));
-                       setProfileImagePreview(null);
-                     }}
-                     className="mt-2 text-xs font-medium text-neutral-500 underline underline-offset-4"
-                   >
-                     Remove image
-                   </button>
-                 ) : null}
-               </div>
+              <div>
+                <label
+                  className="text-sm font-medium text-neutral-700"
+                  htmlFor="profile-image"
+                >
+                  Profile image
+                </label>
+                <div className="mt-2 flex items-center gap-4">
+                  {profileImagePreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={profileImagePreview}
+                      alt="Profile preview"
+                      className="h-16 w-16 rounded-2xl object-cover ring-1 ring-neutral-200"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-neutral-100 text-xs font-semibold text-neutral-400">
+                      Preview
+                    </div>
+                  )}
+                  <input
+                    id="profile-image"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProfileImageChange}
+                    className="block w-full cursor-pointer rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition file:mr-4 file:rounded-xl file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800 focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
+                  />
+                </div>
+                <p className="mt-2 text-xs text-neutral-400">
+                  Upload an image from your device. It will be stored as a data
+                  URL, like the crop photo upload.
+                </p>
+                {profileImagePreview ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditForm((current) => ({
+                        ...current,
+                        profileImage: "",
+                      }));
+                      setProfileImagePreview(null);
+                    }}
+                    className="mt-2 text-xs font-medium text-neutral-500 underline underline-offset-4"
+                  >
+                    Remove image
+                  </button>
+                ) : null}
+              </div>
 
               {editError ? (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
