@@ -373,6 +373,8 @@ export default function ProfileDashboard() {
     const token = localStorage.getItem("agroshield_token");
     if (!token) return;
 
+    setWalletError(null);
+
     try {
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
@@ -383,13 +385,44 @@ export default function ProfileDashboard() {
         body: JSON.stringify({ walletAddress: null }),
       });
 
-      if (response.ok) {
-        setRetryKey((value) => value + 1);
+      const data = (await response.json()) as { success?: boolean; error?: string };
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Failed to disconnect wallet.");
       }
-    } catch {
-      // Silently fail
+
+      setState((current) => {
+        if (current.status !== "ready") return current;
+        return {
+          ...current,
+          profile: {
+            ...current.profile,
+            user: {
+              ...current.profile.user,
+              walletAddress: null,
+            },
+            settings: current.profile.settings.map((setting) =>
+              setting.label === "Wallet status"
+                ? {
+                    ...setting,
+                    value: "Not connected",
+                    helper: "Add a wallet to settle payouts faster",
+                  }
+                : setting
+            ),
+          },
+        };
+      });
+
+      if (isEditOpen) {
+        setEditForm((current) => ({ ...current, walletAddress: "" }));
+      }
+
+      setRetryKey((value) => value + 1);
+    } catch (error) {
+      setWalletError(error instanceof Error ? error.message : "Failed to disconnect wallet.");
     }
-  }, []);
+  }, [isEditOpen]);
 
   if (state.status === "loading") {
     return (
