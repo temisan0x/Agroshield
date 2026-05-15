@@ -13,8 +13,6 @@ import StatCard from "./StatCard";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 
-// ==================== TYPES ====================
-
 type ProfileFieldValue = VendorProfilePayload[keyof VendorProfilePayload];
 
 type TextInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
@@ -39,8 +37,6 @@ interface ProfileFormProps {
   saving: boolean;
 }
 
-// ==================== FORM INPUTS ====================
-
 function TextInput({ label, value, onChange, type = "text", placeholder, ...props }: TextInputProps) {
   return (
     <div>
@@ -49,12 +45,9 @@ function TextInput({ label, value, onChange, type = "text", placeholder, ...prop
         type={type}
         value={value ?? ""}
         onChange={(e) => {
-          const val =
-            type === "number"
-              ? e.target.value === ""
-                ? undefined
-                : Number(e.target.value)
-              : e.target.value;
+          const val = type === "number"
+            ? e.target.value === "" ? undefined : Number(e.target.value)
+            : e.target.value;
           onChange(val);
         }}
         className="mt-1 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-[#c7f1d2]"
@@ -81,8 +74,6 @@ function TextArea({ label, value, onChange, placeholder, rows = 4, ...props }: T
   );
 }
 
-// ==================== PROFILE FORM ====================
-
 function ProfileForm({ profile, onSave, onCancel, saving }: ProfileFormProps) {
   const [form, setForm] = useState<VendorProfilePayload>({
     businessName: profile.businessName ?? "",
@@ -96,8 +87,7 @@ function ProfileForm({ profile, onSave, onCancel, saving }: ProfileFormProps) {
   const update = useCallback(
     (key: keyof VendorProfilePayload, value: ProfileFieldValue) => {
       setForm((prev) => ({ ...prev, [key]: value }));
-    },
-    []
+    }, []
   );
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -127,15 +117,11 @@ function ProfileForm({ profile, onSave, onCancel, saving }: ProfileFormProps) {
   );
 }
 
-// ==================== UTILS ====================
-
 function getCompleteness(p: VendorProfileData | null): number {
   if (!p) return 0;
   const fields = [p.businessName, p.bio, p.specialization, p.experienceYears, p.location, p.phone];
   return Math.round((fields.filter((f) => f != null && f !== "").length / fields.length) * 100);
 }
-
-// ==================== MAIN COMPONENT ====================
 
 export default function VendorProfile() {
   const [profile, setProfile] = useState<VendorProfileData | null>(null);
@@ -146,24 +132,24 @@ export default function VendorProfile() {
   const [connectingWallet, setConnectingWallet] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
 
-  const fetchProfile = useCallback(async () => {
-    try {
-      const token = localStorage.getItem("agroshield_token");
-      const res = await fetch("/api/vendors/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to load profile");
-      const data = await res.json();
-      setProfile(data.profile ?? null);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+const fetchProfile = useCallback(async () => {
+  try {
+    const token = localStorage.getItem("agroshield_token");
+    const res = await fetch("/api/vendors/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Failed to load profile");
+    const data = await res.json();
+    setProfile(data.profile ?? null);
+    setError(null); 
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Something went wrong");
+  } finally {
+    setLoading(false); 
+  }
+}, []);
 
-  useEffect(() => { fetchProfile(); }, [fetchProfile]);
+  useEffect(() => {void fetchProfile(); }, [fetchProfile]);
 
   const handleSave = useCallback(async (payload: VendorProfilePayload) => {
     setSaving(true);
@@ -186,51 +172,29 @@ export default function VendorProfile() {
     }
   }, []);
 
-  const businessInitial = profile?.businessName?.[0]?.toUpperCase() ?? "V";
-  const joined = profile?.createdAt
-    ? new Date(profile.createdAt).toLocaleDateString("en-NG", { month: "short", year: "numeric" })
-    : "—";
-  const completeness = getCompleteness(profile);
-
   const handleConnectWallet = useCallback(async () => {
     setConnectingWallet(true);
     setWalletError(null);
-
     const token = localStorage.getItem("agroshield_token");
     if (!token) {
       setWalletError("Please log in to connect your wallet.");
       setConnectingWallet(false);
       return;
     }
-
     try {
+      const { requestAccess, getAddress } = await import("@stellar/freighter-api");
       const access = await requestAccess();
-      if (access.error) {
-        throw new Error(access.error.message ?? "Failed to request access.");
-      }
-
+      if (access.error) throw new Error(access.error.message ?? "Failed to request access.");
       const { address } = await getAddress();
-
-      if (!address) {
-        throw new Error("Failed to retrieve wallet address from Freighter.");
-      }
-
+      if (!address) throw new Error("Failed to retrieve wallet address from Freighter.");
       const response = await fetch("/api/profile/wallet", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ walletAddress: address }),
       });
-
-      const data = (await response.json()) as { success?: boolean; walletAddress?: string; error?: string };
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error ?? "Failed to save wallet address.");
-      }
-
-      setProfile((prev: VendorProfileData | null) => prev ? { ...prev, walletAddress: data.walletAddress ?? null } : null);
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error ?? "Failed to save wallet address.");
+      setProfile((prev) => prev ? { ...prev, walletAddress: data.walletAddress ?? null } : null);
     } catch (err) {
       setWalletError(err instanceof Error ? err.message : "Failed to connect wallet.");
     } finally {
@@ -238,7 +202,12 @@ export default function VendorProfile() {
     }
   }, []);
 
-  // ── Loading state ──
+  const businessInitial = profile?.businessName?.[0]?.toUpperCase() ?? "V";
+  const joined = profile?.createdAt
+    ? new Date(profile.createdAt).toLocaleDateString("en-NG", { month: "short", year: "numeric" })
+    : "—";
+  const completeness = getCompleteness(profile);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F5F0EB]">
@@ -262,11 +231,13 @@ export default function VendorProfile() {
 
   return (
     <>
+      {/* <Nav /> */}
       <div className="min-h-[calc(100vh-140px)] bg-[#F5F0EB] pt-28 pb-16">
         <div className="mx-auto max-w-6xl px-6">
           <div className="relative overflow-hidden rounded-[32px] border border-neutral-200 bg-white shadow-[0_30px_80px_-60px_rgba(0,0,0,0.4)]">
             <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
 
+              {/* Left: profile info */}
               <section className="bg-[#F9F4EE] px-10 py-12 lg:border-r border-neutral-100">
                 <div className="flex items-start gap-5">
                   <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0f6b2f] text-white font-bold text-2xl">
@@ -300,6 +271,7 @@ export default function VendorProfile() {
                 </div>
               </section>
 
+              {/* Right: stats + wallet */}
               <section className="px-10 py-12">
                 <p className="text-xs uppercase tracking-widest text-neutral-400">Profile Details</p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
@@ -308,6 +280,7 @@ export default function VendorProfile() {
                   <StatCard label="Specialization" value={profile?.specialization || "—"} />
                   <StatCard label="Joined" value={joined} />
                 </div>
+
                 <div className="mt-8">
                   <div className="flex justify-between text-xs mb-2">
                     <span className="text-neutral-500">Profile completeness</span>
@@ -317,73 +290,40 @@ export default function VendorProfile() {
                     <div className="h-full bg-[#0f6b2f] rounded-full transition-all" style={{ width: `${completeness}%` }} />
                   </div>
                 </div>
+
+                <div className="mt-6">
+                  {profile?.walletAddress ? (
+                    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                      <p className="text-xs uppercase tracking-widest text-neutral-400">Wallet</p>
+                      <p className="mt-1 break-all text-sm font-semibold text-neutral-900">{profile.walletAddress}</p>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleConnectWallet}
+                      disabled={connectingWallet}
+                      className="w-full rounded-2xl bg-[#16a34a] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#15803d] disabled:opacity-70"
+                    >
+                      {connectingWallet ? "Connecting..." : "Connect Wallet"}
+                    </button>
+                  )}
+                  {walletError && (
+                    <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
+                      {walletError}
+                    </div>
+                  )}
+                </div>
               </section>
 
-          {/* Right: stats */}
-          <section className="px-10 py-12">
-            <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">
-              Profile Details
-            </p>
-<div className="mt-4 grid grid-cols-2 gap-3">
-               <StatCard
-                 label="Experience"
-                 value={
-                   profile?.experienceYears
-                     ? `${profile.experienceYears} yrs`
-                     : "—"
-                 }
-                 delay={0.1}
-               />
-               <StatCard
-                 label="Location"
-                 value={profile?.location || "—"}
-                 delay={0.15}
-               />
-               <StatCard
-                 label="Specialization"
-                 value={profile?.specialization || "—"}
-                 delay={0.2}
-               />
-               <StatCard
-                 label="Joined"
-                 value={joined}
-                 delay={0.25}
-               />
-             </div>
-
-             {/* Wallet connection */}
-             <div className="mt-4">
-               {profile?.walletAddress ? (
-                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                   <div className="text-xs uppercase tracking-[0.2em] text-neutral-400">
-                     Wallet
-                   </div>
-                   <div className="mt-1 break-all font-[family-name:var(--font-manrope)] text-sm font-semibold text-neutral-900">
-                     {profile.walletAddress}
-                   </div>
-                 </div>
-               ) : (
-                 <button
-                   type="button"
-                   onClick={handleConnectWallet}
-                   disabled={connectingWallet}
-                   className="w-full rounded-2xl border border-neutral-200 bg-[#16a34a] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-70"
-                 >
-                   {connectingWallet ? "Connecting..." : "Connect Wallet"}
-                 </button>
-               )}
-               {walletError ? (
-                 <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
-                   {walletError}
-                 </div>
-               ) : null}
-             </div>
+            </div>
+          </div>
 
           {error && (
             <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-6 py-3 text-sm text-red-700">{error}</div>
           )}
         </div>
       </div>
+      <Footer />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
-import MarketplaceFeed from "@/components/vendor/MarketplaceFeed";
+import VendorCases from "@/components/vendor/VendorCases";
 
 export const metadata = {
   title: "Open Cases | AgroShield",
@@ -12,7 +12,7 @@ export default function VendorCasesPage() {
     <div className="min-h-screen bg-[#F5F0EB]">
       <Nav />
       <main className="pt-28 pb-24">
-        <MarketplaceFeed />
+        <VendorCases />
       </main>
       <Footer />
     </div>

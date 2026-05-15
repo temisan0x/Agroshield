@@ -7,6 +7,7 @@ export type VendorProfileData = {
   location?: string;
   phone?: string;
   createdAt?: string;
+  walletAddress?: string | null; 
 };
 
 export type VendorProfilePayload = {
@@ -16,4 +17,5 @@ export type VendorProfilePayload = {
   experienceYears?: number;
   location?: string;
   phone?: string;
+  walletAddress?: string | null;
 };
