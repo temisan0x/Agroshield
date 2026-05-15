@@ -30,6 +30,7 @@ function Nav() {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const profileButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -101,7 +102,11 @@ function Nav() {
     if (!menuOpen) return;
 
     function handlePointerDown(event: PointerEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedInsideMenu = menuRef.current?.contains(target);
+      const clickedProfileButton = profileButtonRef.current?.contains(target);
+
+      if (!clickedInsideMenu && !clickedProfileButton) {
         setMenuOpen(false);
       }
     }
@@ -212,6 +217,7 @@ function Nav() {
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
+                ref={profileButtonRef}
                 onClick={() => setMenuOpen((value) => !value)}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/15"
                 aria-label="Open profile menu"
@@ -234,10 +240,10 @@ function Nav() {
               </button>
 
               {menuOpen ? (
-                <div className="absolute right-0 top-12 w-52 overflow-hidden rounded-2xl border border-neutral-200 bg-white py-2 text-sm text-neutral-700 shadow-xl">
+                <div className="absolute right-0 top-12 w-56 overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 py-2 text-sm text-neutral-200 shadow-xl">
                   <Link
                     href={profileRoute}
-                    className="block px-4 py-2 transition hover:bg-neutral-50"
+                    className="block px-4 py-2 transition hover:bg-white/5"
                     onClick={() => setMenuOpen(false)}
                   >
                     View profile
@@ -245,7 +251,7 @@ function Nav() {
                   {role === "VENDOR" ? (
                     <Link
                       href="/vendor/bids"
-                      className="block px-4 py-2 transition hover:bg-neutral-50"
+                      className="block px-4 py-2 transition hover:bg-white/5"
                       onClick={() => setMenuOpen(false)}
                     >
                       My bids
@@ -254,16 +260,23 @@ function Nav() {
                   {role === "FARMER" ? (
                     <Link
                       href="/farmer/cases"
-                      className="block px-4 py-2 transition hover:bg-neutral-50"
+                      className="block px-4 py-2 transition hover:bg-white/5"
                       onClick={() => setMenuOpen(false)}
                     >
                       My cases
                     </Link>
                   ) : null}
+                  <Link
+                    href="/settings"
+                    className="block px-4 py-2 transition hover:bg-white/5"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Settings
+                  </Link>
                   <button
                     type="button"
                     onClick={handleSignOut}
-                    className="block w-full px-4 py-2 text-left text-red-600 transition hover:bg-red-50"
+                    className="block w-full px-4 py-2 text-left text-red-400 transition hover:bg-red-500/10"
                   >
                     Sign out
                   </button>
