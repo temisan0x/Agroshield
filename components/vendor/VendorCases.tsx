@@ -36,7 +36,7 @@ export default function VendorCases() {
   }, []);
 
   useEffect(() => {
-    fetchCases();
+    void Promise.resolve().then(fetchCases);
   }, [fetchCases]);
 
   const handleBidSuccess = useCallback((caseId: string) => {

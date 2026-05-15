@@ -6,6 +6,7 @@ import { motion, useReducedMotion, AnimatePresence } from "motion/react";
 import type { CaseListItem, VendorBidItem } from "./types";
 import { deriveBidStatus } from "./types";
 import BidRow from "./BidRow";
+import Link from "next/link";
 
 interface CaseWithBids {
   caseItem: CaseListItem;
@@ -180,12 +181,12 @@ export default function VendorBids() {
                     : `No ${activeTab} bids.`}
                 </p>
                 {activeTab === "all" && (
-                  <a
+                  <Link
                     href="/vendor/cases"
                     className="mt-4 inline-block rounded-xl bg-neutral-900 px-5 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
                   >
                     Browse open cases
-                  </a>
+                  </Link>
                 )}
               </motion.div>
             )}

@@ -35,7 +35,7 @@ export default function MarketplaceFeed() {
     }
   }, []);
 
-  useEffect(() => { void fetchCases(); }, [fetchCases]);
+  useEffect(() => {  void Promise.resolve().then(fetchCases); }, [fetchCases]);
 
   const handleBidSuccess = useCallback((caseId: string) => {
     setPlacedBids((prev) => ({ ...prev, [caseId]: true }));
